@@ -1,0 +1,15 @@
+{
+  "name": "messekonkurranse-touch-app",
+  "version": "1.0.0",
+  "description": "Touch-basert messekonkurranse med lokal Node-backend og kioskvennlig frontend.",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "launch": "node launcher.js",
+    "admin": "node launcher.js --admin",
+    "selector": "node launcher.js --selector"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

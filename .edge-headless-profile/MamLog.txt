@@ -1,0 +1,12 @@
+[2026-05-04T12:18:53.289Z] [INFO] ========================================================================================================================
+[2026-05-04T12:18:53.289Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 147.0.3912.86
+SDK: 2.1.367.0
+OS: windows 10.0.26200.8246
+DeviceType: Desktop
+Manufacturer: Microsoft Corporation
+Model: Surface Laptop 5
+Telemetry: yes
+Managed device support: enabled
+[2026-05-04T12:18:53.289Z] [INFO] Telemetry session ad197938-024a-48f0-93d9-43119cc4a861.
+[2026-05-04T12:18:53.290Z] [INFO] Initializing cache (v1).

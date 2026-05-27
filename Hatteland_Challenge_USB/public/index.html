@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <meta name="theme-color" content="#07131f" />
+    <title>Harbor Rush Challenge</title>
+    <link rel="manifest" href="/manifest.webmanifest?v=20260424u" />
+    <link rel="stylesheet" href="/styles.css?v=20260424ab" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <div class="ambient ambient--left"></div>
+      <div class="ambient ambient--right"></div>
+
+      <header class="topbar">
+        <div class="brand-lockup">
+          <img id="brandLogo" class="brand-logo" src="/assets/image.png" alt="Company logo" />
+          <div>
+            <p class="eyebrow" id="companyName">Nordic Expo Tech</p>
+            <h1 id="contestName">Harbor Rush Challenge</h1>
+          </div>
+        </div>
+        <button id="leaderboardToggle" class="ghost-button">View records</button>
+      </header>
+
+      <main class="screen-stack">
+        <section id="startScreen" class="screen screen--active">
+          <div class="hero-panel">
+            <div class="hero-copy">
+              <p class="kicker">Hatteland Technology stand challenge</p>
+              <h2 id="tagline">Rescue the harbor. Grab cargo. Use two fingers for lifesaver pairs.</h2>
+              <p class="lede">
+                A fast reflex challenge inspired by maritime control rooms, rugged displays and precision under pressure.
+              </p>
+              <p class="brand-proof">Today's challenge by Hatteland Technology</p>
+              <p id="brandSlogan" class="brand-slogan">Technology for demanding operations.</p>
+
+              <div class="stand-callout" aria-hidden="true">
+                <span>Live precision test</span>
+                <strong id="durationBadge">30 sec</strong>
+                <span>Beat the record</span>
+              </div>
+
+              <div class="instruction-row">
+                <article class="instruction-card instruction-card--good">
+                  <span class="instruction-dot"></span>
+                  <strong>Signal lock</strong>
+                  <p id="goodPointsText">+12 base points</p>
+                </article>
+                <article class="instruction-card instruction-card--bonus">
+                  <span class="instruction-dot"></span>
+                  <strong>Cargo secure</strong>
+                  <p id="bonusPointsText">+28 points</p>
+                </article>
+                <article class="instruction-card instruction-card--multi">
+                  <span class="instruction-dot"></span>
+                  <strong>Dual response</strong>
+                  <p id="multiPointsText">+42 points</p>
+                </article>
+                <article class="instruction-card instruction-card--bad">
+                  <span class="instruction-dot"></span>
+                  <strong>Hazard alert</strong>
+                  <p id="badPointsText">-24 and streak reset</p>
+                </article>
+              </div>
+
+              <div class="cta-row">
+                <button id="startButton" class="primary-button">Start game</button>
+                <button id="muteButton" class="secondary-button" aria-pressed="false">
+                  Sound: On
+                </button>
+              </div>
+
+              <p class="prize-banner">
+                Prize: <strong id="prizeName">Weekend fjord cruise</strong>
+              </p>
+            </div>
+
+            <div class="attract-panel">
+              <div class="attract-radar" aria-hidden="true">
+                <span class="radar-ring radar-ring--one"></span>
+                <span class="radar-ring radar-ring--two"></span>
+                <span class="radar-ring radar-ring--three"></span>
+                <span class="radar-sweep"></span>
+                <span class="radar-blip radar-blip--one"></span>
+                <span class="radar-blip radar-blip--two"></span>
+                <span class="radar-blip radar-blip--three"></span>
+              </div>
+              <div class="showcase-copy" aria-hidden="true">
+                <span>Live stand challenge</span>
+                <strong>Precision under pressure</strong>
+                <small>Fast reactions. Clean scoring. Live leaderboard.</small>
+              </div>
+              <div class="attract-board" aria-hidden="true">
+                <span>Records right now</span>
+                <ol id="attractLeaderboard"></ol>
+              </div>
+              <div id="attractLayer" class="attract-layer" aria-hidden="true"></div>
+              <div class="attract-center">
+                <p class="attract-badge">Tap the control surface</p>
+                <p id="attractTechLine" class="attract-hint">Rugged maritime displays.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="countdownScreen" class="screen">
+          <div class="countdown-panel">
+            <p class="kicker">Get ready</p>
+            <div id="countdownValue" class="countdown-value">3</div>
+            <p class="lede">React fast. Use two fingers when the dual input appears.</p>
+          </div>
+        </section>
+
+        <section id="gameScreen" class="screen">
+          <div class="game-alert-bar" aria-hidden="true">
+            <span>POWERED BY HATTELAND TECHNOLOGY</span>
+            <strong>LIVE CHALLENGE</strong>
+            <span>FASTEST HANDS WIN</span>
+          </div>
+          <div id="targetLayer" class="target-layer"></div>
+          <div class="game-scenery game-scenery--skyline" aria-hidden="true"></div>
+          <div class="game-scenery game-scenery--lighthouse" aria-hidden="true"></div>
+          <div class="game-scenery game-scenery--ship" aria-hidden="true"></div>
+          <div class="game-scenery game-scenery--foam" aria-hidden="true"></div>
+          <button id="holdExitButton" class="hold-exit-button" type="button" data-hold-exit>
+            <span class="hold-exit-button__label">Hold to exit</span>
+            <span id="holdExitFill" class="hold-exit-button__fill"></span>
+          </button>
+          <button class="pause-button" type="button" data-pause-game>Pause</button>
+          <div class="pause-overlay" data-pause-overlay="game" aria-live="polite">
+            <div class="pause-panel">
+              <span>Paused</span>
+              <strong>Harbor Rush</strong>
+              <button class="primary-button" type="button" data-resume-game>Resume</button>
+            </div>
+          </div>
+          <div class="hud">
+            <div class="hud-card">
+              <span class="hud-label">Score</span>
+              <strong id="scoreValue">0</strong>
+            </div>
+            <div class="hud-card">
+              <span class="hud-label">Time</span>
+              <strong id="timerValue">30.0</strong>
+            </div>
+            <div class="hud-card">
+              <span class="hud-label">Streak</span>
+              <strong id="streakValue">0</strong>
+            </div>
+            <div class="hud-card hud-card--multiplier">
+              <span class="hud-label">Multiplier</span>
+              <strong id="multiplierValue">x1</strong>
+            </div>
+          </div>
+
+          <div id="gameArena" class="game-arena" aria-label="Game arena"></div>
+          <div id="comboBurst" class="combo-burst" aria-live="polite"></div>
+        </section>
+
+        <section id="duelScreen" class="screen">
+          <button id="duelHoldExitButton" class="hold-exit-button hold-exit-button--duel" type="button" data-hold-exit>
+            <span class="hold-exit-button__label">Hold to exit</span>
+            <span id="duelHoldExitFill" class="hold-exit-button__fill"></span>
+          </button>
+          <button class="pause-button pause-button--duel" type="button" data-pause-game>Pause</button>
+          <div class="pause-overlay" data-pause-overlay="duel" aria-live="polite">
+            <div class="pause-panel">
+              <span>Paused</span>
+              <strong>Bridge Duel</strong>
+              <button class="primary-button" type="button" data-resume-game>Resume</button>
+            </div>
+          </div>
+          <div class="duel-arena" aria-label="Bridge Duel arena">
+            <div class="duel-hud">
+              <article>
+                <span>Blue operator</span>
+                <strong id="duelScoreBlue">0</strong>
+              </article>
+              <article class="duel-timer">
+                <span>Bridge Duel</span>
+                <strong id="duelTimer">30.0</strong>
+              </article>
+              <article>
+                <span>Gold operator</span>
+                <strong id="duelScoreGold">0</strong>
+              </article>
+            </div>
+            <div id="duelZoneBlue" class="duel-zone duel-zone--blue">
+              <div class="duel-zone__label">
+                <span>Blue side</span>
+                <strong id="duelChargeBlue">Attack 0/100</strong>
+              </div>
+              <div class="duel-docks" data-player="blue"></div>
+              <div class="duel-harbor" data-player="blue"></div>
+              <p id="duelEffectBlue" class="duel-effect">Draw paths from ships to matching docks</p>
+            </div>
+            <div class="duel-core">
+              <span>Harbor control</span>
+              <strong id="duelStatus">Guide ships. Build combos. Launch attacks.</strong>
+              <small>Storm speeds ships. Fog reduces visibility. Traffic adds ships. Glitch distorts paths.</small>
+            </div>
+            <div id="duelZoneGold" class="duel-zone duel-zone--gold">
+              <div class="duel-zone__label">
+                <span>Gold side</span>
+                <strong id="duelChargeGold">Attack 0/100</strong>
+              </div>
+              <div class="duel-docks" data-player="gold"></div>
+              <div class="duel-harbor" data-player="gold"></div>
+              <p id="duelEffectGold" class="duel-effect">Draw paths from ships to matching docks</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="duelResultScreen" class="screen">
+          <div class="result-panel duel-result-panel">
+            <p class="kicker">Bridge Duel complete</p>
+            <h2 id="duelWinnerTitle">Winner</h2>
+            <div class="duel-result-score">
+              <article>
+                <span>Blue</span>
+                <strong id="duelFinalBlue">0</strong>
+              </article>
+              <article>
+                <span>Gold</span>
+                <strong id="duelFinalGold">0</strong>
+              </article>
+            </div>
+            <p id="duelResultMessage" class="lede">Precision under pressure wins the bridge.</p>
+            <div class="cta-row cta-row--center">
+              <button id="duelAgainButton" class="primary-button">Play again</button>
+              <button id="duelHomeButton" class="ghost-button">Go back home</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="resultScreen" class="screen">
+          <div class="result-panel">
+            <p class="kicker">Round complete</p>
+            <h2>Your score</h2>
+            <div id="resultScore" class="result-score">0</div>
+            <p id="resultMessage" class="lede">Try again to beat the record.</p>
+            <div class="result-stats" aria-label="Round statistics">
+              <article>
+                <span>Best streak</span>
+                <strong id="resultBestStreak">0</strong>
+              </article>
+              <article>
+                <span>Fastest hit</span>
+                <strong id="resultFastestHit">-</strong>
+              </article>
+              <article>
+                <span>Hits</span>
+                <strong id="resultHits">0</strong>
+              </article>
+              <article>
+                <span>Hazards</span>
+                <strong id="resultHazards">0</strong>
+              </article>
+              <article>
+                <span>Time bonus</span>
+                <strong id="resultTimeBonus">0s</strong>
+              </article>
+              <article class="result-record-card">
+                <span>Record</span>
+                <strong id="resultRecord">0</strong>
+              </article>
+            </div>
+            <p class="result-brand-line">Precision matters offshore. Thanks for testing yours.</p>
+          <a id="resultQrLink" class="result-qr" href="https://www.hattelandtechnology.com" target="_blank" rel="noreferrer">
+              <img id="resultQrImage" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=8&data=https%3A%2F%2Fwww.hattelandtechnology.com" alt="QR code for Hatteland Technology" />
+              <span>Explore Hatteland Technology</span>
+            </a>
+            <div class="result-product-strip">
+              <span>Rugged maritime displays</span>
+              <span>Bridge-ready systems</span>
+              <span>Reliable industrial networks</span>
+              <span>Norwegian technology partner</span>
+            </div>
+            <div class="cta-row cta-row--center">
+              <button id="playAgainButton" class="primary-button">Play again</button>
+              <button id="resultHomeButton" class="secondary-button">Start screen</button>
+              <button id="registerButton" class="ghost-button" hidden>Register score</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="formScreen" class="screen">
+          <div class="form-panel">
+            <div>
+              <p class="kicker">Registration</p>
+              <h2>Join the competition</h2>
+              <p class="lede">
+                Your score is linked automatically. Your name, email and phone number are
+                used only for this game and prize contact.
+              </p>
+            </div>
+
+            <form id="entryForm" class="entry-form" novalidate>
+              <label class="field">
+                <span>Name *</span>
+                <input id="nameInput" name="name" type="text" autocomplete="name" required />
+              </label>
+              <label class="field">
+                <span>Email</span>
+                <input id="emailInput" name="email" type="email" autocomplete="email" />
+              </label>
+              <label class="field">
+                <span>Phone number</span>
+                <input id="phoneInput" name="phone" type="tel" autocomplete="tel" />
+              </label>
+
+              <div class="privacy-box">
+                <strong id="consentTitle">Consent for game participation</strong>
+                <p id="privacyNotice">
+                  We store your name, email and phone number only for this game and to contact
+                  you about a prize if you win.
+                </p>
+                <label class="checkbox-row">
+                  <input id="consentInput" name="consent" type="checkbox" required />
+                  <span id="consentLabel">
+                    I consent to Hatteland Technology storing my contact details only for this
+                    game and prize contact.
+                  </span>
+                </label>
+              </div>
+
+              <p id="formError" class="form-error" aria-live="polite"></p>
+
+              <div class="cta-row">
+                <button type="submit" class="primary-button">Save entry</button>
+                <button id="cancelRegistrationButton" type="button" class="secondary-button">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section id="confirmationScreen" class="screen">
+          <div class="result-panel result-panel--success">
+            <p class="kicker">Saved</p>
+            <h2>Thanks for playing</h2>
+            <p id="confirmationMessage" class="lede">
+              Your score has been saved. We will contact the winner after the event.
+            </p>
+            <div class="cta-row cta-row--center">
+              <button id="newPlayerButton" class="primary-button">Next player</button>
+              <button id="confirmationHomeButton" class="ghost-button">Go back home</button>
+            </div>
+            <p id="autoResetText" class="subtle-note"></p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="leaderboardModal" class="modal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Hatteland Precision Board</p>
+            <h3>Top 10</h3>
+          </div>
+          <button id="closeLeaderboardButton" class="ghost-button">Close</button>
+        </div>
+        <ol id="leaderboardList" class="leaderboard-list"></ol>
+      </div>
+    </dialog>
+
+    <template id="confettiTemplate">
+      <span class="confetti-piece"></span>
+    </template>
+
+    <script src="/app.js?v=20260424ab" type="module"></script>
+  </body>
+</html>

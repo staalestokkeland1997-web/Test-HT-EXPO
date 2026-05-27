@@ -1,4 +1,4 @@
-clau# Hatteland Technology Messekonkurranse
+# Hatteland Technology Messekonkurranse
 
 Dette er en lokal kiosk-app for messebruk. Den kjorer paa en PC med Node.js, uten eksterne npm-pakker og uten internettkrav under drift.
 
