@@ -1,0 +1,10 @@
+# Portabel Chromium lastes ned lokalt med LAST_NED_CHROME.bat.
+# Den er for stor for git (chrome.dll er ~289 MB) og skal ikke committes.
+chrome/
+**/chrome/
+chrome-user-data/
+**/chrome-user-data/
+
+# Logger
+server.err.log
+server.log

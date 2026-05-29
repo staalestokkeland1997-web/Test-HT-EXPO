@@ -138,7 +138,22 @@ Vil du bruke en annen arkitektur (x86/ARM64), bytt ut `node/node.exe` med riktig
 Krav paa maskinen som skal kjore appen:
 
 - Ingen, naar portabel Node.js i `node/` brukes (anbefalt). Ellers Node.js 18 eller nyere.
-- Microsoft Edge anbefales for kioskmodus (folger med Windows IoT 2019).
+- En Chromium-basert nettleser for kioskmodus: Edge eller Chrome som er installert, ELLER portabel Chromium (se under).
+
+### Valgfritt: portabel Chromium (egen nettleser i mappen)
+
+Launcheren bruker nettleser i denne rekkefolgen:
+
+1. Buntet portabel Chromium i `chrome/chrome.exe` (hvis den finnes) - har forrang.
+2. Installert Edge (standardstier + `%LOCALAPPDATA%`), eller Chrome hvis `kiosk.browser` er `chrome`.
+3. Fallback: standard nettleser, med URL skrevet i konsollen.
+
+Portabel Chromium er ~300 MB og kan derfor ikke ligge i git (GitHub-grense 100 MB per fil). Hent den slik:
+
+1. Paa en PC med internett: kjor `LAST_NED_CHROME.bat` i `Hatteland_Challenge_USB_OPPDATERT`. Den laster ned og pakker ut Chromium til `chrome/`.
+2. Kopier sa hele mappen til minnepennen.
+
+Egendefinert sti kan settes med miljovariablene `CHROME_PATH` eller `EDGE_PATH`.
 
 ## Prosjektstruktur
 

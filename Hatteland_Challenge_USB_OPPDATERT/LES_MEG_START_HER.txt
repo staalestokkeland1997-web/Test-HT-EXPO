@@ -38,6 +38,21 @@ OM NODE.JS (portabel)
   Node.js som eventuelt er installert pa maskinen (PATH).
 - Vil du bruke en annen Node, legg riktig node.exe i mappen "node".
 
+VALGFRITT: PORTABEL CHROMIUM (egen nettleser i mappen)
+------------------------------------------------------
+Appen bruker normalt Edge eller Chrome som finnes pa maskinen.
+Vil du ha en helt selvstendig nettleser i mappen (uavhengig av hva
+som er installert):
+
+1. Pa en PC MED internett: dobbeltklikk LAST_NED_CHROME.bat
+   Den laster ned portabel Chromium inn i mappen "chrome".
+   (Filen er ~300 MB og kan derfor ikke ligge ferdig i nedlastingen.)
+2. Kopier sa hele mappen til minnepennen.
+
+Nar mappen "chrome" finnes, bruker startfilene den automatisk i kiosk.
+Vil du ikke bruke den, slett mappen "chrome" - da brukes Edge/Chrome
+som er installert pa maskinen.
+
 FEILSOKING
 ----------
 - "Fant ikke Node.js": mappen "node" mangler eller ble ikke kopiert.

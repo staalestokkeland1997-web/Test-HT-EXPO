@@ -68,6 +68,9 @@ async function findAvailablePort(host, preferredPort) {
   throw new Error(`No free port found from ${preferredPort} to ${preferredPort + 40}.`);
 }
 
+const PORTABLE_CHROME = path.join(ROOT_DIR, "chrome", "chrome.exe");
+const CHROME_DATA_DIR = path.join(ROOT_DIR, "chrome-user-data");
+
 const EDGE_PATHS = [
   process.env.EDGE_PATH,
   "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
@@ -75,9 +78,31 @@ const EDGE_PATHS = [
   process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Microsoft", "Edge", "Application", "msedge.exe")
 ];
 
-function findEdge() {
-  for (const candidate of EDGE_PATHS) {
+const CHROME_PATHS = [
+  process.env.CHROME_PATH,
+  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+  process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Google", "Chrome", "Application", "chrome.exe")
+];
+
+function firstExisting(paths) {
+  for (const candidate of paths) {
     if (candidate && fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+// Velg nettleser. Buntet portabel Chromium (chrome\chrome.exe) har forrang
+// fordi den er mest forutsigbar for kiosk. Ellers brukes installert
+// Edge/Chrome, styrt av config.kiosk.browser.
+function pickBrowser(preferred) {
+  if (fs.existsSync(PORTABLE_CHROME)) return { exe: PORTABLE_CHROME, portable: true };
+  if (preferred === "chrome") {
+    const exe = firstExisting(CHROME_PATHS) || firstExisting(EDGE_PATHS);
+    if (exe) return { exe, portable: false };
+  } else {
+    const exe = firstExisting(EDGE_PATHS) || firstExisting(CHROME_PATHS);
+    if (exe) return { exe, portable: false };
   }
   return null;
 }
@@ -87,17 +112,24 @@ function openUrl(url, config) {
   const browser = String(config.kiosk.browser || "default").toLowerCase();
   const useKiosk = Boolean(config.kiosk.kioskMode || process.argv.includes("--kiosk"));
 
-  if (browser === "edge") {
-    const edge = findEdge();
-    if (edge) {
-      const args = useKiosk
-        ? [url, "--kiosk", "--edge-kiosk-type=fullscreen", "--no-first-run"]
-        : ["--new-window", url];
-      spawn(edge, args, { detached: true, stdio: "ignore" }).unref();
+  if (browser !== "default") {
+    const choice = pickBrowser(browser);
+    if (choice) {
+      const isEdge = /msedge\.exe$/i.test(choice.exe);
+      const args = [];
+      if (useKiosk) {
+        args.push(url, "--kiosk", "--no-first-run");
+        if (isEdge) args.push("--edge-kiosk-type=fullscreen");
+      } else {
+        args.push("--new-window", url);
+      }
+      // Portabel Chromium trenger en skrivbar profilmappe (kan ligge pa USB/last ned-mappe)
+      if (choice.portable) args.push(`--user-data-dir=${CHROME_DATA_DIR}`);
+      spawn(choice.exe, args, { detached: true, stdio: "ignore" }).unref();
       return;
     }
     console.log("");
-    console.log("Microsoft Edge ble ikke funnet. Apner standard nettleser i stedet.");
+    console.log("Fant ingen Edge eller Chrome. Apner standard nettleser i stedet.");
     console.log(`Apne denne adressen manuelt om ingenting skjer: ${url}`);
     console.log("Trykk F11 for fullskjerm.");
     console.log("");
