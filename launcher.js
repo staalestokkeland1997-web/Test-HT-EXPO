@@ -68,18 +68,41 @@ async function findAvailablePort(host, preferredPort) {
   throw new Error(`No free port found from ${preferredPort} to ${preferredPort + 40}.`);
 }
 
+const EDGE_PATHS = [
+  process.env.EDGE_PATH,
+  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+  "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"
+];
+
+function findEdge() {
+  for (const candidate of EDGE_PATHS) {
+    if (candidate && fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 function openUrl(url, config) {
   if (!config.kiosk.openBrowserOnStart) return;
   const browser = String(config.kiosk.browser || "default").toLowerCase();
   const useKiosk = Boolean(config.kiosk.kioskMode || process.argv.includes("--kiosk"));
-  if (browser === "edge" && useKiosk) {
-    spawn("cmd", ["/c", "start", "", "msedge", "--kiosk", url, "--edge-kiosk-type=fullscreen"], { detached: true, stdio: "ignore" }).unref();
-    return;
-  }
+
   if (browser === "edge") {
-    spawn("cmd", ["/c", "start", "", "msedge", "--new-window", url], { detached: true, stdio: "ignore" }).unref();
-    return;
+    const edge = findEdge();
+    if (edge) {
+      const args = useKiosk
+        ? [url, "--kiosk", "--edge-kiosk-type=fullscreen", "--no-first-run"]
+        : ["--new-window", url];
+      spawn(edge, args, { detached: true, stdio: "ignore" }).unref();
+      return;
+    }
+    console.log("");
+    console.log("Microsoft Edge ble ikke funnet. Apner standard nettleser i stedet.");
+    console.log(`Apne denne adressen manuelt om ingenting skjer: ${url}`);
+    console.log("Trykk F11 for fullskjerm.");
+    console.log("");
   }
+
+  // Fallback: standard nettleser / protokoll-handler
   spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" }).unref();
 }
 
