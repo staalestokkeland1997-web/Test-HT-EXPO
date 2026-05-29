@@ -71,7 +71,8 @@ async function findAvailablePort(host, preferredPort) {
 const EDGE_PATHS = [
   process.env.EDGE_PATH,
   "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-  "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"
+  "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+  process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Microsoft", "Edge", "Application", "msedge.exe")
 ];
 
 function findEdge() {
