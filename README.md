@@ -114,12 +114,31 @@ Admin kan eksportere CSV og nullstille leaderboard. Ta kopi av `data/entries.jso
 
 ## USB-leveranse
 
-Mappen `Hatteland_Challenge_USB` er laget for aa kopieres til minnepenn. Den inneholder startskript, server, public-filer, config og tom datafil.
+Mappen `Hatteland_Challenge_USB_OPPDATERT` er den komplette, offline-klare leveransen som kopieres til minnepenn. Den inneholder startskript, server, public-filer, config, tom datafil og portabel Node.js.
+
+### Offline / uten nett (Windows IoT 2019, x64)
+
+Mappen `Hatteland_Challenge_USB_OPPDATERT` krever **ingen internett-tilgang og ingen installasjon**:
+
+- Portabel Node.js ligger ferdig i `node/node.exe` (Node v20, Windows x64) og kjores rett fra mappen.
+- Startfilene bruker denne automatisk. Hvis `node/node.exe` mangler, faller de tilbake til Node.js som eventuelt er installert paa maskinen (PATH).
+
+Slik gjor du:
+
+1. Kopier hele mappen `Hatteland_Challenge_USB_OPPDATERT` til minnepennen.
+2. Paa messe-PC-en: kopier mappen til harddisk, for eksempel `C:\HattelandChallenge`.
+3. Dobbeltklikk en startfil:
+   - `START_HT_GAME_KIOSK.bat` (spillvelger, kiosk/fullskjerm)
+   - `START_HARBOR_RUSH.bat`
+   - `START_1V1.bat`
+   - `START_AIR_HOCKEY.bat`
+
+Vil du bruke en annen arkitektur (x86/ARM64), bytt ut `node/node.exe` med riktig `node.exe` fra https://nodejs.org/dist/.
 
 Krav paa maskinen som skal kjore appen:
 
-- Node.js 18 eller nyere
-- Microsoft Edge anbefales for kioskmodus
+- Ingen, naar portabel Node.js i `node/` brukes (anbefalt). Ellers Node.js 18 eller nyere.
+- Microsoft Edge anbefales for kioskmodus (folger med Windows IoT 2019).
 
 ## Prosjektstruktur
 
@@ -141,12 +160,15 @@ public/
   admin-rush.js
   admin-duel.js
   styles.css
+node/
+  node.exe                (portabel Node.js, kun i USB_OPPDATERT)
+  LICENSE
 launcher.js
 server.js
-START_HER.bat
-START_ADMIN.bat
-START_SELECTOR.bat
-START_SERVER_ONLY.bat
+START_HT_GAME_KIOSK.bat   (spillvelger, kiosk)
+START_HARBOR_RUSH.bat
+START_1V1.bat
+START_AIR_HOCKEY.bat
 ```
 
 ## Driftstips
