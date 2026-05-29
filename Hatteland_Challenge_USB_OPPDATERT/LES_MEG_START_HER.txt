@@ -1,16 +1,52 @@
-HATTELAND CHALLENGE - START HER
-
-Det er to startfiler:
-
-1. START_HARBOR_RUSH.bat
-   Starter Harbor Rush p? egen port.
-   Settings/admin vises i det svarte vinduet som URL, normalt:
-   http://localhost:3101/admin-rush.html
-
-2. START_1V1.bat
-   Starter Bridge Duel 1v1 p? egen port.
-   Settings/admin vises i det svarte vinduet som URL, normalt:
-   http://localhost:3102/admin-duel.html
-
-Hvis porten er opptatt, velger programmet neste ledige port og skriver riktig Game- og Settings-URL i vinduet.
-Lukk gamle svarte Node/server-vinduer f?r ny test.
+HATTELAND CHALLENGE - START HER (OFFLINE / UTEN NETT)
+=====================================================
+
+Denne mappen er komplett og trenger INGEN internett-tilgang.
+Portabel Node.js ligger ferdig i mappen "node" og kjorer rett fra
+mappen - du trenger IKKE installere Node.js.
+
+GJORE KLAR PC-EN
+----------------
+1. Kopier HELE denne mappen til PC-en, for eksempel:
+      C:\HattelandChallenge
+   (Tips: kjor helst fra harddisk, ikke direkte fra minnepenn.)
+2. Det er alt. Ingen installasjon kreves.
+
+STARTE SPILLENE (dobbeltklikk en av disse)
+------------------------------------------
+   START_HT_GAME_KIOSK.bat   Spillvelger i kiosk/fullskjerm (anbefalt)
+   START_HARBOR_RUSH.bat     Starter rett i Harbor Rush
+   START_1V1.bat             Starter rett i Bridge Duel 1v1
+   START_AIR_HOCKEY.bat      Starter rett i Air Hockey
+
+Det apnes et svart vindu (Node-server) og nettleseren med spillet.
+I det svarte vinduet vises Game-URL og Settings/Admin-URL.
+Lukk gamle svarte Node-vinduer for du starter en ny test.
+
+ADMIN / INNSTILLINGER
+---------------------
+Admin-sidene apnes via URL-ene som vises i det svarte vinduet, typisk:
+   http://localhost:3100/status.html        (status / oversikt)
+   http://localhost:3101/admin-rush.html     (Harbor Rush)
+   http://localhost:3102/admin-duel.html     (Bridge Duel)
+Adminpassord ligger i config\contest-config.json. Bytt det for messen.
+
+OM NODE.JS (portabel)
+---------------------
+- node\node.exe er Node.js v20 for Windows x64.
+- Startfilene bruker denne automatisk. Finnes den ikke, prover de
+  Node.js som eventuelt er installert pa maskinen (PATH).
+- Vil du bruke en annen Node, legg riktig node.exe i mappen "node".
+
+FEILSOKING
+----------
+- "Fant ikke Node.js": mappen "node" mangler eller ble ikke kopiert.
+  Kopier hele mappen pa nytt.
+- Porten er opptatt: programmet velger neste ledige port automatisk
+  og skriver riktig URL i det svarte vinduet.
+- Endre port/host/kioskmodus i config\kiosk-config.json.
+
+DATA
+----
+Deltakere lagres lokalt i data\entries.json.
+Ta en kopi av denne filen etter messen hvis du vil arkivere resultatene.
