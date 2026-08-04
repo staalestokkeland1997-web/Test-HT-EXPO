@@ -109,8 +109,16 @@ function loadConfig() {
   return parsed;
 }
 
+// Skriv via midlertidig fil + rename slik at et stromkutt midt i skrivingen
+// aldri etterlater en halvskrevet config- eller datafil.
+function writeFileAtomic(filePath, contents) {
+  const tempPath = `${filePath}.tmp-${process.pid}`;
+  fs.writeFileSync(tempPath, contents, "utf8");
+  fs.renameSync(tempPath, filePath);
+}
+
 function writeConfig(config) {
-  fs.writeFileSync(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  writeFileAtomic(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`);
 }
 
 function toBoundedNumber(value, fallback, min, max) {
@@ -376,11 +384,23 @@ function publicConfig(config) {
 function readEntries() {
   ensureDataFile();
   const raw = fs.readFileSync(DATA_PATH, "utf8");
-  return JSON.parse(raw);
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    // Korrupt datafil skal ikke stoppe kiosken midt i messen: ta vare paa
+    // originalen for feilsoking og fortsett med tom liste.
+    const corruptPath = `${DATA_PATH}.corrupt-${Date.now()}`;
+    fs.copyFileSync(DATA_PATH, corruptPath);
+    console.error(`Could not parse ${DATA_PATH}. Saved a copy at ${corruptPath} and continuing with an empty list.`);
+    writeEntries([]);
+    return [];
+  }
 }
 
 function writeEntries(entries) {
-  fs.writeFileSync(DATA_PATH, `${JSON.stringify(entries, null, 2)}\n`, "utf8");
+  writeFileAtomic(DATA_PATH, `${JSON.stringify(entries, null, 2)}\n`);
 }
 
 function backupEntries(reason = "manual") {
@@ -611,10 +631,21 @@ function parseJsonBody(request) {
   });
 }
 
+function safeEquals(left, right) {
+  const leftBuffer = Buffer.from(String(left ?? ""));
+  const rightBuffer = Buffer.from(String(right ?? ""));
+
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
 function requireAdmin(request, response, config) {
   const password = request.headers["x-admin-password"];
 
-  if (password !== config.admin.password) {
+  if (!safeEquals(password, config.admin.password)) {
     sendJson(response, 401, {
       error: "Invalid admin password."
     });
@@ -690,7 +721,7 @@ function serveStatic(requestPath, response) {
   const safePath = path.normalize(decodeURIComponent(requestedPath)).replace(/^(\.\.[/\\])+/, "");
   const filePath = path.join(PUBLIC_DIR, safePath);
 
-  if (!filePath.startsWith(PUBLIC_DIR)) {
+  if (filePath !== PUBLIC_DIR && !filePath.startsWith(PUBLIC_DIR + path.sep)) {
     sendText(response, 403, "Forbidden");
     return;
   }
@@ -1147,6 +1178,16 @@ const server = http.createServer(async (request, response) => {
 });
 
 ensureDataFile();
+
+server.on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(`Port ${PORT} on ${HOST} is already in use.`);
+    console.error("Close the other kiosk window, or change server.port in config/kiosk-config.json.");
+  } else {
+    console.error(error);
+  }
+  process.exit(1);
+});
 
 server.listen(PORT, HOST, () => {
   const displayHost = HOST === "0.0.0.0" ? "localhost" : HOST;

@@ -26,9 +26,11 @@ Lukk gamle svarte Node-vinduer for du starter en ny test.
 ADMIN / INNSTILLINGER
 ---------------------
 Admin-sidene apnes via URL-ene som vises i det svarte vinduet, typisk:
-   http://localhost:3100/status.html        (status / oversikt)
-   http://localhost:3101/admin-rush.html     (Harbor Rush)
-   http://localhost:3102/admin-duel.html     (Bridge Duel)
+   http://localhost:3000/admin.html          (admin-oversikt)
+   http://localhost:3000/status.html         (status / drift)
+   http://localhost:3000/admin-rush.html     (Harbor Rush)
+   http://localhost:3000/admin-duel.html     (Bridge Duel)
+(Porten kan bli en annen hvis 3000 er opptatt - se det svarte vinduet.)
 Adminpassord ligger i config\contest-config.json. Bytt det for messen.
 
 OM NODE.JS (portabel)

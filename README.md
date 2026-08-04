@@ -1,4 +1,4 @@
-clau# Hatteland Technology Messekonkurranse
+# Hatteland Technology Messekonkurranse
 
 Dette er en lokal kiosk-app for messebruk. Den kjorer paa en PC med Node.js, uten eksterne npm-pakker og uten internettkrav under drift.
 
@@ -16,24 +16,21 @@ Dette er en lokal kiosk-app for messebruk. Den kjorer paa en PC med Node.js, ute
 
 ## Start
 
-Anbefalt paa messe-PC:
+Anbefalt paa messe-PC (starter spillvelger i kiosk/fullskjerm):
 
 ```text
-START_HER.bat
-```
-
-Andre startvalg:
-
-```text
-START_SELECTOR.bat      Aapner skjult spillvelger
-START_ADMIN.bat         Aapner adminside
-START_SERVER_ONLY.bat   Starter bare lokal server
+START_HT_GAME_KIOSK.bat
 ```
 
 Vanlig terminalstart:
 
 ```bash
-npm start
+npm start          # bare server (bruker config/kiosk-config.json)
+npm run launch     # server + nettleser med spillvelger
+npm run rush       # start rett i Harbor Rush
+npm run duel       # start rett i Bridge Duel 1v1
+npm run airhockey  # start rett i HT Air Hockey
+npm run kiosk      # spillvelger i kiosk/fullskjerm
 ```
 
 Standard URL er:
