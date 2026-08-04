@@ -389,7 +389,9 @@
       color: #ffdce1;
     }
 
-    .kiosk-back {
+    /* Skjul kiosk-navigasjonen under aktiv runde saa et feiltrykk ikke
+       avbryter spillet - hold-to-exit og pause er fortsatt tilgjengelig. */
+    body.game-running .kiosk-nav {
       display: none;
     }
 
@@ -981,7 +983,7 @@
 </head>
 <body>
   <nav class="kiosk-nav" aria-label="Kiosk navigation">
-    <a class="kiosk-nav-button" href="select.html">Main kiosk</a>
+    <a class="kiosk-nav-button" href="/select.html">Main kiosk</a>
     <button id="exitGameButton" class="kiosk-nav-button kiosk-nav-button--exit" type="button">Exit game</button>
   </nav>
   <main class="app">
@@ -1002,7 +1004,6 @@
     </header>
 
     <section id="startScreen" class="screen active">
-      <a class="kiosk-back" href="select.html">Back to kiosk</a>
       <div class="start-layout">
         <div class="start-copy">
           <p class="eyebrow">Today&apos;s challenge by Hatteland Technology</p>
@@ -1070,7 +1071,6 @@
     </section>
 
     <section id="gameScreen" class="screen game-screen">
-      <a class="kiosk-back" href="select.html">Back to kiosk</a>
       <canvas id="gameCanvas"></canvas>
       <div class="hud">
         <article class="hud-card">
@@ -1191,6 +1191,9 @@
       maxVisibleTargets: 5,
       minTargetSize: 72,
       maxTargetSize: 112,
+      countdownSeconds: 3,
+      multiTouchWindowMs: 320,
+      powerUpDurationSeconds: 6,
       soundDefaultEnabled: true
     };
 
@@ -1246,14 +1249,17 @@
     };
 
     let config = { ...DEFAULT_CONFIG };
+    let pendingConfig = null;
     const isFileMode = window.location.protocol === "file:";
     let soundEnabled = true;
+    let soundPreferenceTouched = false;
     let animationId = 0;
     let lastTime = 0;
     let nextId = 1;
     let pauseStartedAt = 0;
     let holdExitTimer = null;
     let holdExitProgressTimer = null;
+    let countdownTimer = null;
     const HOLD_EXIT_MS = 1200;
 
     const techLines = [
@@ -1290,8 +1296,7 @@
         finalAlarmPlayed: false,
         bestStreak: 0,
         fastestHit: null,
-        hits: 0,
-        multiArmed: new Map()
+        hits: 0
       };
     }
 
@@ -1327,19 +1332,14 @@
 
     function getRecord() {
       const board = getLeaderboard();
-      return Math.max(0, ...board.map((entry) => Number(entry.score || 0)));
+      const boardBest = Math.max(0, ...board.map((entry) => Number(entry.score || 0)));
+      return Math.max(boardBest, Number(localStorage.getItem("harborRushRecordScore") || 0));
     }
 
-    function saveRecordRun() {
-      const entries = getLeaderboard();
-      entries.push({
-        name: "Player",
-        score: state.score,
-        playedAt: new Date().toISOString()
-      });
-      entries.sort((left, right) => right.score - left.score);
-      setLeaderboard(entries);
-      renderLeaderboard(entries);
+    function rememberRecord(score) {
+      if (score > getRecord()) {
+        localStorage.setItem("harborRushRecordScore", String(score));
+      }
     }
 
     function renderLeaderboard(entries = getLeaderboard()) {
@@ -1368,7 +1368,7 @@
         return;
       }
       try {
-        const response = await fetch("/api/leaderboard", { cache: "no-store" });
+        const response = await fetch("/api/leaderboard?game=rush", { cache: "no-store" });
 
         if (!response.ok) {
           throw new Error("No server leaderboard.");
@@ -1428,6 +1428,7 @@
       const email = ui.emailInput.value.trim();
       const phone = ui.phoneInput.value.trim();
       const entry = {
+        game: "rush",
         name,
         email,
         phone,
@@ -1479,7 +1480,9 @@
       ui.bonusText.textContent = `+${config.bonusPoints} points`;
       ui.multiText.textContent = `+${config.multiPoints} and streak boost`;
       ui.badText.textContent = `-${config.badPenalty} and streak reset`;
-      soundEnabled = Boolean(config.soundDefaultEnabled);
+      if (!soundPreferenceTouched) {
+        soundEnabled = Boolean(config.soundDefaultEnabled);
+      }
       updateSoundButton();
     }
 
@@ -1493,7 +1496,7 @@
         if (!response.ok) return;
         const payload = await response.json();
         const game = payload.game || {};
-        config = {
+        const nextConfig = {
           ...config,
           durationSeconds: Number(game.durationSeconds || config.durationSeconds),
           goodPoints: Number(game.goodTargetBasePoints || config.goodPoints),
@@ -1508,8 +1511,17 @@
           maxVisibleTargets: Number(game.maxVisibleTargets || config.maxVisibleTargets),
           minTargetSize: Number(game.minTargetSize || config.minTargetSize),
           maxTargetSize: Number(game.maxTargetSize || config.maxTargetSize),
+          countdownSeconds: Number(game.countdownSeconds || config.countdownSeconds),
+          multiTouchWindowMs: Number(game.multiTouchWindowMs || config.multiTouchWindowMs),
+          powerUpDurationSeconds: Number(game.powerUpDurationSeconds || config.powerUpDurationSeconds),
           soundDefaultEnabled: Boolean(game.soundDefaultEnabled ?? config.soundDefaultEnabled)
         };
+        if (state && state.running) {
+          // Ikke bytt regler midt i en runde - vent til neste start.
+          pendingConfig = nextConfig;
+          return;
+        }
+        config = nextConfig;
         applyConfig();
       } catch (error) {
         applyConfig();
@@ -1690,14 +1702,16 @@
         return;
       }
 
+      const powerMs = Math.max(1000, Number(config.powerUpDurationSeconds || 6) * 1000);
+
       if (effect === "slow") {
-        state.slowUntil = performance.now() + 5200;
+        state.slowUntil = performance.now() + powerMs;
         ui.activePowerText.textContent = "Slow mode active";
         return;
       }
 
       state.activePower = "double";
-      state.powerUntil = performance.now() + 5200;
+      state.powerUntil = performance.now() + powerMs;
       ui.activePowerText.textContent = "Double score active";
     }
 
@@ -1745,7 +1759,7 @@
       } else if (target.type === "multi" && !target.armed) {
         target.armed = true;
         target.bornAt = now;
-        target.expiresAt = now + 760;
+        target.expiresAt = now + Math.max(160, Number(config.multiTouchWindowMs || 320));
         addScorePop("SECOND TAP", target.x, target.y, true);
         playTone(540, 0.05, "square", 0.03);
         return;
@@ -2177,6 +2191,7 @@
       pauseStartedAt = performance.now();
       clearHoldExit();
       ui.pauseOverlay.classList.add("active");
+      document.body.classList.remove("game-running");
     }
 
     function resumeGame() {
@@ -2192,18 +2207,21 @@
         target.expiresAt += pausedMs;
       });
       ui.pauseOverlay.classList.remove("active");
+      document.body.classList.add("game-running");
     }
 
     function startCountdown() {
+      if (countdownTimer || (state && state.running)) return;
       showScreen("game");
       resizeCanvas();
       ui.countdownOverlay.classList.remove("hidden");
-      let value = 3;
+      let value = Math.max(1, Math.min(5, Math.round(Number(config.countdownSeconds || 3))));
       ui.countdownValue.textContent = String(value);
-      const interval = setInterval(() => {
+      countdownTimer = setInterval(() => {
         value -= 1;
         if (value <= 0) {
-          clearInterval(interval);
+          clearInterval(countdownTimer);
+          countdownTimer = null;
           ui.countdownOverlay.classList.add("hidden");
           beginGame();
         } else {
@@ -2215,14 +2233,21 @@
 
     function beginGame() {
       cancelAnimationFrame(animationId);
+      if (pendingConfig) {
+        config = pendingConfig;
+        pendingConfig = null;
+        applyConfig();
+      }
       state = createInitialState();
       state.running = true;
+      document.body.classList.add("game-running");
       state.timeLeft = config.durationSeconds;
       nextId = 1;
       lastTime = performance.now();
       state.nextSpawn = performance.now();
-      ui.saveScoreButton.disabled = true;
-      ui.saveScoreButton.textContent = "Saved automatically";
+      ui.registrationForm.classList.add("registration-form--hidden");
+      ui.saveScoreButton.disabled = false;
+      ui.saveScoreButton.textContent = "Save score";
       ui.nameInput.value = "";
       ui.emailInput.value = "";
       ui.phoneInput.value = "";
@@ -2243,11 +2268,12 @@
 
     function exitToStart() {
       clearHoldExit();
-      state.paused = false;
-      ui.pauseOverlay.classList.remove("active");
+      clearInterval(countdownTimer);
+      countdownTimer = null;
       state.paused = false;
       ui.pauseOverlay.classList.remove("active");
       state.running = false;
+      document.body.classList.remove("game-running");
       cancelAnimationFrame(animationId);
       ui.countdownOverlay.classList.add("hidden");
       showScreen("start");
@@ -2258,10 +2284,11 @@
       state.paused = false;
       ui.pauseOverlay.classList.remove("active");
       state.running = false;
+      document.body.classList.remove("game-running");
       cancelAnimationFrame(animationId);
       const previousRecord = getRecord();
       const isRecord = state.score > previousRecord;
-      saveRecordRun();
+      rememberRecord(state.score);
       const record = Math.max(previousRecord, state.score);
       ui.finalScore.textContent = String(state.score);
       ui.bestStreakResult.textContent = String(state.bestStreak);
@@ -2274,7 +2301,10 @@
           ? `${Math.max(0, previousRecord - state.score)} points from the record. Best streak: ${state.bestStreak}. Try again.`
           : `First score is set. Play again and push the board higher.`;
       playTone(isRecord ? 980 : 760, 0.14, "triangle", 0.04);
+      // Vis registreringen saa scoren faktisk kan lagres paa leaderboardet.
+      ui.registrationForm.classList.remove("registration-form--hidden");
       showScreen("result");
+      refreshLeaderboard();
     }
 
 
@@ -2306,8 +2336,12 @@
       ui.resumeButton.addEventListener("click", resumeGame);
       ui.soundButton.addEventListener("click", () => {
         soundEnabled = !soundEnabled;
+        soundPreferenceTouched = true;
         updateSoundButton();
       });
+      // Kiosk: ingen kontekstmeny eller lenke-dragging ved lange trykk.
+      document.addEventListener("contextmenu", (event) => event.preventDefault());
+      document.addEventListener("dragstart", (event) => event.preventDefault());
       canvas.addEventListener("pointerdown", onPointerDown);
       window.addEventListener("resize", () => {
         resizeCanvas();
@@ -2369,6 +2403,25 @@
       document.body.appendChild(notice);
     }
 
+    // Attract-modus: en glemt resultatskjerm gaar tilbake til startskjermen av seg selv.
+    const IDLE_RESET_MS = 90000;
+    let idleTimer = null;
+
+    function armIdleReset() {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        if (!state.running && !countdownTimer && screens.result.classList.contains("active")) {
+          showScreen("start");
+          render();
+        }
+        armIdleReset();
+      }, IDLE_RESET_MS);
+    }
+
+    ["pointerdown", "pointermove", "keydown"].forEach((eventName) => {
+      window.addEventListener(eventName, armIdleReset, { passive: true });
+    });
+
     try {
       applyConfig();
       bindEvents();
@@ -2378,6 +2431,7 @@
       render();
       loadConfig();
       showFileModeNotice();
+      armIdleReset();
     } catch (error) {
       showStartupError(error);
     }

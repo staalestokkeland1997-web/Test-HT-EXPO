@@ -24,9 +24,12 @@ const DEFAULT_KIOSK_CONFIG = {
       harborRush: "/harbor-rush-standalone.html",
       bridgeDuel: "/bridge-duel-standalone.html",
       airHockey: "/air-hockey-standalone.html",
+      containerStacker: "/container-stacker-standalone.html",
+      sonarSequence: "/sonar-sequence-standalone.html",
       admin: "/admin.html",
       adminRush: "/admin-rush.html",
-      adminDuel: "/admin-duel.html"
+      adminDuel: "/admin-duel.html",
+      adminGames: "/admin-games.html"
     }
   }
 };
@@ -109,8 +112,16 @@ function loadConfig() {
   return parsed;
 }
 
+// Skriv via midlertidig fil + rename slik at et stromkutt midt i skrivingen
+// aldri etterlater en halvskrevet config- eller datafil.
+function writeFileAtomic(filePath, contents) {
+  const tempPath = `${filePath}.tmp-${process.pid}`;
+  fs.writeFileSync(tempPath, contents, "utf8");
+  fs.renameSync(tempPath, filePath);
+}
+
 function writeConfig(config) {
-  fs.writeFileSync(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  writeFileAtomic(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`);
 }
 
 function toBoundedNumber(value, fallback, min, max) {
@@ -362,12 +373,91 @@ function normalizeDuelGameSettings(payload, currentDuelGame = {}) {
   };
 }
 
+// Alle spill i kiosken. configKey peker paa seksjonen i contest-config.json,
+// og gameId er det spillene sender inn sammen med score.
+const GAMES = {
+  stacker: { label: "Container Stacker", configKey: "stackerGame" },
+  rush: { label: "Harbor Rush", configKey: "game" },
+  duel: { label: "Bridge Duel", configKey: "duelGame" },
+  airhockey: { label: "HT Air Hockey", configKey: "airHockeyGame" },
+  sonar: { label: "Sonar Sequence", configKey: "sonarGame" }
+};
+
+const DEFAULT_GAME_ID = "rush";
+
+// Enkle grenser per felt slik at nye spill ikke trenger hver sin normalizer.
+const GAME_SCHEMAS = {
+  airhockey: {
+    numbers: {
+      matchSeconds: { min: 20, max: 300, fallback: 60 },
+      winScore: { min: 3, max: 50, fallback: 25 },
+      puckSpeedPercent: { min: 60, max: 180, fallback: 100 },
+      paddleSizePercent: { min: 60, max: 160, fallback: 100 },
+      powerUpDurationSeconds: { min: 3, max: 20, fallback: 7 }
+    },
+    booleans: { enablePowerUps: true }
+  },
+  stacker: {
+    numbers: {
+      startSpeedPercent: { min: 40, max: 200, fallback: 100 },
+      speedRampPercent: { min: 0, max: 200, fallback: 100 },
+      startWidthPercent: { min: 50, max: 160, fallback: 100 },
+      perfectTolerancePercent: { min: 1, max: 15, fallback: 5 },
+      perfectRegainPercent: { min: 0, max: 100, fallback: 35 },
+      swayStartLevel: { min: 0, max: 60, fallback: 8 },
+      swayStrengthPercent: { min: 0, max: 200, fallback: 100 },
+      basePoints: { min: 1, max: 200, fallback: 10 },
+      perfectBonusPoints: { min: 0, max: 300, fallback: 25 },
+      maxComboBonus: { min: 0, max: 500, fallback: 120 },
+      timeLimitSeconds: { min: 20, max: 300, fallback: 90 }
+    },
+    booleans: { enableSway: true, enableTimeLimit: false }
+  },
+  sonar: {
+    numbers: {
+      nodeCount: { min: 4, max: 9, fallback: 6 },
+      pingMs: { min: 180, max: 1200, fallback: 520 },
+      gapMs: { min: 60, max: 600, fallback: 180 },
+      inputTimeoutSeconds: { min: 2, max: 20, fallback: 6 },
+      startLength: { min: 1, max: 6, fallback: 1 },
+      pointsPerStep: { min: 1, max: 100, fallback: 10 },
+      speedUpPercent: { min: 0, max: 20, fallback: 4 }
+    },
+    booleans: { enableSound: true, enableTimeout: true }
+  }
+};
+
+function normalizeBySchema(payload, current, schema) {
+  const next = { ...current };
+  next.difficultyName = String(payload.difficultyName || current.difficultyName || "Custom").slice(0, 40);
+
+  Object.entries(schema.numbers || {}).forEach(([field, range]) => {
+    const fallback = current[field] ?? range.fallback;
+    next[field] = toBoundedNumber(payload[field], fallback, range.min, range.max);
+  });
+
+  Object.entries(schema.booleans || {}).forEach(([field, fallback]) => {
+    next[field] =
+      typeof payload[field] === "boolean" ? payload[field] : Boolean(current[field] ?? fallback);
+  });
+
+  return next;
+}
+
+function normalizeGameId(value) {
+  const id = String(value || "").trim();
+  return Object.prototype.hasOwnProperty.call(GAMES, id) ? id : null;
+}
+
 function publicConfig(config) {
   return {
     brand: config.brand,
     booth: config.booth,
     game: config.game,
     duelGame: config.duelGame,
+    airHockeyGame: config.airHockeyGame || {},
+    stackerGame: config.stackerGame || {},
+    sonarGame: config.sonarGame || {},
     privacy: config.privacy,
     theme: config.theme
   };
@@ -376,11 +466,31 @@ function publicConfig(config) {
 function readEntries() {
   ensureDataFile();
   const raw = fs.readFileSync(DATA_PATH, "utf8");
-  return JSON.parse(raw);
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    // Eldre oppforinger ble lagret for spillene fikk egne lister.
+    return parsed.map((entry) => ({
+      ...entry,
+      game: normalizeGameId(entry.game) || DEFAULT_GAME_ID
+    }));
+  } catch (error) {
+    // Korrupt datafil skal ikke stoppe kiosken midt i messen: ta vare paa
+    // originalen for feilsoking og fortsett med tom liste.
+    const corruptPath = `${DATA_PATH}.corrupt-${Date.now()}`;
+    fs.copyFileSync(DATA_PATH, corruptPath);
+    console.error(`Could not parse ${DATA_PATH}. Saved a copy at ${corruptPath} and continuing with an empty list.`);
+    writeEntries([]);
+    return [];
+  }
 }
 
 function writeEntries(entries) {
-  fs.writeFileSync(DATA_PATH, `${JSON.stringify(entries, null, 2)}\n`, "utf8");
+  writeFileAtomic(DATA_PATH, `${JSON.stringify(entries, null, 2)}\n`);
 }
 
 function backupEntries(reason = "manual") {
@@ -430,8 +540,10 @@ function cleanupExpiredSessions(config) {
   }
 }
 
-function getLeaderboard(entries, limit = 10) {
-  return [...entries]
+function getLeaderboard(entries, limit = 10, game = null) {
+  const scoped = game ? entries.filter((entry) => entry.game === game) : entries;
+
+  return [...scoped]
     .sort((left, right) => {
       if (right.score !== left.score) {
         return right.score - left.score;
@@ -444,8 +556,15 @@ function getLeaderboard(entries, limit = 10) {
       rank: index + 1,
       name: entry.name,
       score: entry.score,
+      game: entry.game,
       playedAt: entry.playedAt
     }));
+}
+
+function getAllLeaderboards(entries, limit = 10) {
+  return Object.fromEntries(
+    Object.keys(GAMES).map((gameId) => [gameId, getLeaderboard(entries, limit, gameId)])
+  );
 }
 
 function getStreakMultiplier(streak) {
@@ -532,9 +651,10 @@ function calculateExpectedScoreFromStats(stats, gameConfig) {
 }
 
 function buildCsv(entries) {
-  const header = ["id", "name", "email", "phone", "score", "playedAt", "createdAt"];
+  const header = ["id", "game", "name", "email", "phone", "score", "playedAt", "createdAt"];
   const rows = entries.map((entry) => [
     entry.id,
+    entry.game || DEFAULT_GAME_ID,
     entry.name,
     entry.email,
     entry.phone || "",
@@ -611,10 +731,21 @@ function parseJsonBody(request) {
   });
 }
 
+function safeEquals(left, right) {
+  const leftBuffer = Buffer.from(String(left ?? ""));
+  const rightBuffer = Buffer.from(String(right ?? ""));
+
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
 function requireAdmin(request, response, config) {
   const password = request.headers["x-admin-password"];
 
-  if (password !== config.admin.password) {
+  if (!safeEquals(password, config.admin.password)) {
     sendJson(response, 401, {
       error: "Invalid admin password."
     });
@@ -686,11 +817,15 @@ function validateStandaloneEntry(payload = {}) {
 
 // Serve only files under public/ so config and entry data are never exposed directly.
 function serveStatic(requestPath, response) {
-  const requestedPath = requestPath === "/" ? getDefaultRoute() : requestPath;
+  let requestedPath = requestPath === "/" ? getDefaultRoute() : requestPath;
+
+  if (requestedPath === "/favicon.ico") {
+    requestedPath = "/assets/logo.svg";
+  }
   const safePath = path.normalize(decodeURIComponent(requestedPath)).replace(/^(\.\.[/\\])+/, "");
   const filePath = path.join(PUBLIC_DIR, safePath);
 
-  if (!filePath.startsWith(PUBLIC_DIR)) {
+  if (filePath !== PUBLIC_DIR && !filePath.startsWith(PUBLIC_DIR + path.sep)) {
     sendText(response, 403, "Forbidden");
     return;
   }
@@ -722,7 +857,8 @@ function serveStatic(requestPath, response) {
   });
 }
 
-async function handleApi(request, response, pathname) {
+async function handleApi(request, response, url) {
+  const pathname = url.pathname;
   const config = loadConfig();
   cleanupExpiredSessions(config);
 
@@ -733,8 +869,23 @@ async function handleApi(request, response, pathname) {
 
   if (request.method === "GET" && pathname === "/api/leaderboard") {
     const entries = readEntries();
+    const game = normalizeGameId(url.searchParams.get("game"));
+
     sendJson(response, 200, {
-      entries: getLeaderboard(entries, 10)
+      game,
+      entries: getLeaderboard(entries, 10, game),
+      boards: getAllLeaderboards(entries, 10)
+    });
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/games") {
+    sendJson(response, 200, {
+      games: Object.entries(GAMES).map(([id, meta]) => ({
+        id,
+        label: meta.label,
+        settings: config[meta.configKey] || {}
+      }))
     });
     return;
   }
@@ -921,6 +1072,7 @@ async function handleApi(request, response, pathname) {
       email: String(payload.email || "").trim().toLowerCase(),
       phone: String(payload.phone || "").trim(),
       score: session.score,
+      game: DEFAULT_GAME_ID,
       playedAt: new Date(session.finishedAt).toISOString(),
       createdAt: now
     };
@@ -955,12 +1107,14 @@ async function handleApi(request, response, pathname) {
     }
 
     const now = new Date().toISOString();
+    const game = normalizeGameId(entryPayload.game) || DEFAULT_GAME_ID;
     const entry = {
       id: crypto.randomUUID(),
       name: String(entryPayload.name).trim().slice(0, 40),
       email: String(entryPayload.email || "").trim().toLowerCase(),
       phone: String(entryPayload.phone || "").trim(),
       score,
+      game,
       playedAt: entryPayload.playedAt || now,
       createdAt: now
     };
@@ -971,7 +1125,7 @@ async function handleApi(request, response, pathname) {
 
     sendJson(response, 201, {
       entry,
-      leaderboard: getLeaderboard(entries, 10)
+      leaderboard: getLeaderboard(entries, 10, game)
     });
     return;
   }
@@ -981,13 +1135,17 @@ async function handleApi(request, response, pathname) {
       return;
     }
 
-    const entries = readEntries().sort(
+    const allEntries = readEntries().sort(
       (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
     );
+    const game = normalizeGameId(url.searchParams.get("game"));
+    const entries = game ? allEntries.filter((entry) => entry.game === game) : allEntries;
 
     sendJson(response, 200, {
+      game,
       entries,
-      leaderboard: getLeaderboard(entries, 10)
+      leaderboard: getLeaderboard(allEntries, 10, game),
+      boards: getAllLeaderboards(allEntries, 10)
     });
     return;
   }
@@ -1071,7 +1229,10 @@ async function handleApi(request, response, pathname) {
       return;
     }
 
-    const csv = buildCsv(readEntries());
+    const exportGame = normalizeGameId(url.searchParams.get("game"));
+    const csv = buildCsv(
+      exportGame ? readEntries().filter((entry) => entry.game === exportGame) : readEntries()
+    );
     response.writeHead(200, {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": 'attachment; filename="messekonkurranse-export.csv"',
@@ -1104,7 +1265,60 @@ async function handleApi(request, response, pathname) {
       games: {
         harborRush: config.game,
         bridgeDuel: config.duelGame || {}
-      }
+      },
+      perGame: Object.entries(GAMES).map(([id, meta]) => ({
+        id,
+        label: meta.label,
+        entries: entries.filter((entry) => entry.game === id).length,
+        difficultyName: (config[meta.configKey] || {}).difficultyName || "Custom",
+        best: getLeaderboard(entries, 1, id)[0] || null
+      }))
+    });
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/admin/game-settings") {
+    if (!requireAdmin(request, response, config)) {
+      return;
+    }
+
+    const entries = readEntries();
+    sendJson(response, 200, {
+      games: Object.entries(GAMES).map(([id, meta]) => ({
+        id,
+        label: meta.label,
+        configurable: Boolean(GAME_SCHEMAS[id]),
+        settings: config[meta.configKey] || {},
+        entryCount: entries.filter((entry) => entry.game === id).length,
+        leaderboard: getLeaderboard(entries, 10, id)
+      }))
+    });
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/admin/game-settings") {
+    if (!requireAdmin(request, response, config)) {
+      return;
+    }
+
+    const payload = await parseJsonBody(request);
+    const gameId = normalizeGameId(payload.game);
+    const schema = gameId && GAME_SCHEMAS[gameId];
+
+    if (!schema) {
+      sendJson(response, 400, {
+        error: "Unknown game, or the game has its own settings page."
+      });
+      return;
+    }
+
+    const configKey = GAMES[gameId].configKey;
+    const settings = normalizeBySchema(payload.settings || {}, config[configKey] || {}, schema);
+    writeConfig({ ...config, [configKey]: settings });
+
+    sendJson(response, 200, {
+      game: gameId,
+      settings
     });
     return;
   }
@@ -1114,10 +1328,18 @@ async function handleApi(request, response, pathname) {
       return;
     }
 
-    const backupPath = backupEntries("before-reset");
-    writeEntries([]);
+    const payload = await parseJsonBody(request);
+    const gameId = normalizeGameId(payload.game);
+    const backupPath = backupEntries(gameId ? `before-reset-${gameId}` : "before-reset");
+    const entries = readEntries();
+    // Uten game nullstilles alt, ellers bare det ene spillets resultater.
+    const remaining = gameId ? entries.filter((entry) => entry.game !== gameId) : [];
+
+    writeEntries(remaining);
     sendJson(response, 200, {
       success: true,
+      game: gameId,
+      removed: entries.length - remaining.length,
       backupPath
     });
     return;
@@ -1133,7 +1355,7 @@ const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, "http://localhost");
 
     if (url.pathname.startsWith("/api/")) {
-      await handleApi(request, response, url.pathname);
+      await handleApi(request, response, url);
       return;
     }
 
@@ -1147,6 +1369,16 @@ const server = http.createServer(async (request, response) => {
 });
 
 ensureDataFile();
+
+server.on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(`Port ${PORT} on ${HOST} is already in use.`);
+    console.error("Close the other kiosk window, or change server.port in config/kiosk-config.json.");
+  } else {
+    console.error(error);
+  }
+  process.exit(1);
+});
 
 server.listen(PORT, HOST, () => {
   const displayHost = HOST === "0.0.0.0" ? "localhost" : HOST;

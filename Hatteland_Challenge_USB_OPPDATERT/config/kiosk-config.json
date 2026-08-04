@@ -13,9 +13,12 @@
       "harborRush": "/harbor-rush-standalone.html",
       "bridgeDuel": "/bridge-duel-standalone.html",
       "airHockey": "/air-hockey-standalone.html",
+      "containerStacker": "/container-stacker-standalone.html",
+      "sonarSequence": "/sonar-sequence-standalone.html",
       "admin": "/admin.html",
       "adminRush": "/admin-rush.html",
-      "adminDuel": "/admin-duel.html"
+      "adminDuel": "/admin-duel.html",
+      "adminGames": "/admin-games.html"
     }
   }
 }

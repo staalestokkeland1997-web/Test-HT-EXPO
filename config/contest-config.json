@@ -99,6 +99,43 @@
     "enableTrafficAttack": true,
     "enableGlitchAttack": true
   },
+  "airHockeyGame": {
+    "difficultyName": "Normal",
+    "matchSeconds": 60,
+    "winScore": 25,
+    "puckSpeedPercent": 100,
+    "paddleSizePercent": 100,
+    "powerUpDurationSeconds": 7,
+    "enablePowerUps": true
+  },
+  "stackerGame": {
+    "difficultyName": "Normal",
+    "startSpeedPercent": 100,
+    "speedRampPercent": 100,
+    "startWidthPercent": 100,
+    "perfectTolerancePercent": 5,
+    "perfectRegainPercent": 35,
+    "swayStartLevel": 8,
+    "swayStrengthPercent": 100,
+    "basePoints": 10,
+    "perfectBonusPoints": 25,
+    "maxComboBonus": 120,
+    "timeLimitSeconds": 90,
+    "enableSway": true,
+    "enableTimeLimit": false
+  },
+  "sonarGame": {
+    "difficultyName": "Normal",
+    "nodeCount": 6,
+    "pingMs": 520,
+    "gapMs": 180,
+    "inputTimeoutSeconds": 6,
+    "startLength": 1,
+    "pointsPerStep": 10,
+    "speedUpPercent": 4,
+    "enableSound": true,
+    "enableTimeout": true
+  },
   "privacy": {
     "consentTitle": "Consent for game participation",
     "consentLabel": "I consent to Hatteland Technology storing my name, email and phone number only for this game and prize contact.",

@@ -35,8 +35,20 @@ const MODES = {
   airhockey: {
     label: "HT Air Hockey",
     path: "/air-hockey-standalone.html",
-    adminPath: "/status.html",
+    adminPath: "/admin-games.html",
     preferredPort: 3103
+  },
+  stacker: {
+    label: "Container Stacker",
+    path: "/container-stacker-standalone.html",
+    adminPath: "/admin-games.html",
+    preferredPort: 3104
+  },
+  sonar: {
+    label: "Sonar Sequence",
+    path: "/sonar-sequence-standalone.html",
+    adminPath: "/admin-games.html",
+    preferredPort: 3105
   }
 };
 
@@ -146,7 +158,9 @@ function ensureKioskFiles() {
     path.join(ROOT_DIR, "public", "select.html"),
     path.join(ROOT_DIR, "public", "harbor-rush-standalone.html"),
     path.join(ROOT_DIR, "public", "bridge-duel-standalone.html"),
-    path.join(ROOT_DIR, "public", "air-hockey-standalone.html")
+    path.join(ROOT_DIR, "public", "air-hockey-standalone.html"),
+    path.join(ROOT_DIR, "public", "container-stacker-standalone.html"),
+    path.join(ROOT_DIR, "public", "sonar-sequence-standalone.html")
   ];
 
   for (const file of requiredFiles) {
@@ -168,13 +182,15 @@ function logKioskCheck(mode, host, port, adminUrl) {
   console.log(`- Port: ${port}`);
   console.log(`- Data: ${path.relative(ROOT_DIR, ENTRIES_PATH)}`);
   console.log(`- Screen: ${process.env.SCREEN_WIDTH || "auto"} x ${process.env.SCREEN_HEIGHT || "auto"}`);
-  console.log(`- Status: ${adminUrl.replace(/admin-(rush|duel)\.html.*/, "status.html")}`);
+  console.log(`- Status: ${adminUrl.replace(/admin-(rush|duel|games)\.html.*/, "status.html")}`);
 }
 
 function getMode() {
   if (process.argv.includes("--duel")) return "duel";
   if (process.argv.includes("--rush")) return "rush";
   if (process.argv.includes("--airhockey") || process.argv.includes("--air-hockey")) return "airhockey";
+  if (process.argv.includes("--stacker")) return "stacker";
+  if (process.argv.includes("--sonar")) return "sonar";
   return "selector";
 }
 

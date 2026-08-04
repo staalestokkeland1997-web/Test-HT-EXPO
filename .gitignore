@@ -5,6 +5,18 @@ chrome/
 chrome-user-data/
 **/chrome-user-data/
 
+# Nettleserprofiler generert under kjoring
+.edge-headless-profile/
+**/.edge-headless-profile/
+
 # Logger
 server.err.log
 server.log
+*.log
+
+# Genererte arkiver av USB-leveransen
+Hatteland_Challenge_USB_OPPDATERT.zip
+*.zip
+
+# Sikkerhetskopier av deltakerdata lages lokalt under drift
+data/backups/

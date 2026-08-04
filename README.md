@@ -1,39 +1,69 @@
-clau# Hatteland Technology Messekonkurranse
+# Hatteland Technology Messekonkurranse
 
 Dette er en lokal kiosk-app for messebruk. Den kjorer paa en PC med Node.js, uten eksterne npm-pakker og uten internettkrav under drift.
 
 ## Innhold
 
-- Harbor Rush Challenge: standalone single-player score challenge med lokal leaderboard.
-- Bridge Duel 1v1: to spillere paa venstre og hoyre side av en flat touchskjerm.
-- Skjult spillvelger: `/select.html`.
+Fem touchspill med maritimt preg, alle med egen highscoreliste:
+
+| Spill | Type | Fil |
+| --- | --- | --- |
+| Container Stacker | Presisjon, 1 spiller | `/container-stacker-standalone.html` |
+| Harbor Rush | Refleks, 1 spiller | `/harbor-rush-standalone.html` |
+| Bridge Duel | 1 mot 1 | `/bridge-duel-standalone.html` |
+| HT Air Hockey | 1 mot 1 | `/air-hockey-standalone.html` |
+| Sonar Sequence | Hukommelse, 1 spiller | `/sonar-sequence-standalone.html` |
+
+I tillegg:
+
+- Spillvelger (kioskens forside): `/select.html`.
 - Admin hub: `/admin.html`.
-- Harbor Rush admin: `/admin-rush.html`.
-- Bridge Duel admin: `/admin-duel.html`.
-- Lokal lagring av deltakere i `data/entries.json`.
-- CSV-eksport fra admin.
+- Spillinnstillinger og highscore per spill: `/admin-games.html`.
+- Harbor Rush detaljadmin: `/admin-rush.html`.
+- Bridge Duel detaljadmin: `/admin-duel.html`.
+- Lokal lagring av deltakere i `data/entries.json` (hver oppforing merkes med spill).
+- CSV-eksport per spill eller samlet.
 - Konfigurasjon for spill, branding, adminpassord, port og kioskstart.
+
+## Innstillinger og highscore per spill
+
+Alt som gjelder det enkelte spillet ligger paa en side:
+
+```text
+http://127.0.0.1:3000/admin-games.html
+```
+
+Der kan du per spill:
+
+- velge vanskelighetsgrad (Easy / Normal / Hard) eller finjustere hvert felt,
+- sette rundetid (`Time limit`, `Match time`, `Round time`, `Answer time`),
+- se topplisten for akkurat det spillet,
+- eksportere deltakerne for det spillet til CSV,
+- nullstille bare det spillets resultater (det tas automatisk sikkerhetskopi
+  av `data/entries.json` til `data/backups/` for sletting).
+
+Endringer trer i kraft ved neste runde. Et spill som allerede er i gang
+beholder reglene runden startet med.
 
 ## Start
 
-Anbefalt paa messe-PC:
+Anbefalt paa messe-PC (starter spillvelger i kiosk/fullskjerm):
 
 ```text
-START_HER.bat
-```
-
-Andre startvalg:
-
-```text
-START_SELECTOR.bat      Aapner skjult spillvelger
-START_ADMIN.bat         Aapner adminside
-START_SERVER_ONLY.bat   Starter bare lokal server
+START_HT_GAME_KIOSK.bat
 ```
 
 Vanlig terminalstart:
 
 ```bash
-npm start
+npm start          # bare server (bruker config/kiosk-config.json)
+npm run launch     # server + nettleser med spillvelger
+npm run stacker    # start rett i Container Stacker
+npm run rush       # start rett i Harbor Rush
+npm run duel       # start rett i Bridge Duel 1v1
+npm run airhockey  # start rett i HT Air Hockey
+npm run sonar      # start rett i Sonar Sequence
+npm run kiosk      # spillvelger i kiosk/fullskjerm
 ```
 
 Standard URL er:
@@ -47,10 +77,14 @@ http://127.0.0.1:3000
 ```text
 http://127.0.0.1:3000/select.html
 http://127.0.0.1:3000/admin.html
+http://127.0.0.1:3000/admin-games.html
 http://127.0.0.1:3000/admin-rush.html
 http://127.0.0.1:3000/admin-duel.html
+http://127.0.0.1:3000/container-stacker-standalone.html
 http://127.0.0.1:3000/harbor-rush-standalone.html
 http://127.0.0.1:3000/bridge-duel-standalone.html
+http://127.0.0.1:3000/air-hockey-standalone.html
+http://127.0.0.1:3000/sonar-sequence-standalone.html
 ```
 
 ## Konfigurasjon

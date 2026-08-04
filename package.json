@@ -6,8 +6,12 @@
   "scripts": {
     "start": "node server.js",
     "launch": "node launcher.js",
-    "admin": "node launcher.js --admin",
-    "selector": "node launcher.js --selector"
+    "rush": "node launcher.js --rush",
+    "duel": "node launcher.js --duel",
+    "airhockey": "node launcher.js --airhockey",
+    "stacker": "node launcher.js --stacker",
+    "sonar": "node launcher.js --sonar",
+    "kiosk": "node launcher.js --kiosk"
   },
   "engines": {
     "node": ">=18"
