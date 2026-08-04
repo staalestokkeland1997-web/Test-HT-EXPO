@@ -16,24 +16,21 @@ Dette er en lokal kiosk-app for messebruk. Den kjorer paa en PC med Node.js, ute
 
 ## Start
 
-Anbefalt paa messe-PC:
+Anbefalt paa messe-PC (starter spillvelger i kiosk/fullskjerm):
 
 ```text
-START_HER.bat
-```
-
-Andre startvalg:
-
-```text
-START_SELECTOR.bat      Aapner skjult spillvelger
-START_ADMIN.bat         Aapner adminside
-START_SERVER_ONLY.bat   Starter bare lokal server
+START_HT_GAME_KIOSK.bat
 ```
 
 Vanlig terminalstart:
 
 ```bash
-npm start
+npm start          # bare server (bruker config/kiosk-config.json)
+npm run launch     # server + nettleser med spillvelger
+npm run rush       # start rett i Harbor Rush
+npm run duel       # start rett i Bridge Duel 1v1
+npm run airhockey  # start rett i HT Air Hockey
+npm run kiosk      # spillvelger i kiosk/fullskjerm
 ```
 
 Standard URL er:
@@ -114,12 +111,46 @@ Admin kan eksportere CSV og nullstille leaderboard. Ta kopi av `data/entries.jso
 
 ## USB-leveranse
 
-Mappen `Hatteland_Challenge_USB` er laget for aa kopieres til minnepenn. Den inneholder startskript, server, public-filer, config og tom datafil.
+Mappen `Hatteland_Challenge_USB_OPPDATERT` er den komplette, offline-klare leveransen som kopieres til minnepenn. Den inneholder startskript, server, public-filer, config, tom datafil og portabel Node.js.
+
+### Offline / uten nett (Windows IoT 2019, x64)
+
+Mappen `Hatteland_Challenge_USB_OPPDATERT` krever **ingen internett-tilgang og ingen installasjon**:
+
+- Portabel Node.js ligger ferdig i `node/node.exe` (Node v20, Windows x64) og kjores rett fra mappen.
+- Startfilene bruker denne automatisk. Hvis `node/node.exe` mangler, faller de tilbake til Node.js som eventuelt er installert paa maskinen (PATH).
+
+Slik gjor du:
+
+1. Kopier hele mappen `Hatteland_Challenge_USB_OPPDATERT` til minnepennen.
+2. Paa messe-PC-en: kopier mappen til harddisk, for eksempel `C:\HattelandChallenge`.
+3. Dobbeltklikk en startfil:
+   - `START_HT_GAME_KIOSK.bat` (spillvelger, kiosk/fullskjerm)
+   - `START_HARBOR_RUSH.bat`
+   - `START_1V1.bat`
+   - `START_AIR_HOCKEY.bat`
+
+Vil du bruke en annen arkitektur (x86/ARM64), bytt ut `node/node.exe` med riktig `node.exe` fra https://nodejs.org/dist/.
 
 Krav paa maskinen som skal kjore appen:
 
-- Node.js 18 eller nyere
-- Microsoft Edge anbefales for kioskmodus
+- Ingen, naar portabel Node.js i `node/` brukes (anbefalt). Ellers Node.js 18 eller nyere.
+- En Chromium-basert nettleser for kioskmodus: Edge eller Chrome som er installert, ELLER portabel Chromium (se under).
+
+### Valgfritt: portabel Chromium (egen nettleser i mappen)
+
+Launcheren bruker nettleser i denne rekkefolgen:
+
+1. Buntet portabel Chromium i `chrome/chrome.exe` (hvis den finnes) - har forrang.
+2. Installert Edge (standardstier + `%LOCALAPPDATA%`), eller Chrome hvis `kiosk.browser` er `chrome`.
+3. Fallback: standard nettleser, med URL skrevet i konsollen.
+
+Portabel Chromium er ~300 MB og kan derfor ikke ligge i git (GitHub-grense 100 MB per fil). Hent den slik:
+
+1. Paa en PC med internett: kjor `LAST_NED_CHROME.bat` i `Hatteland_Challenge_USB_OPPDATERT`. Den laster ned og pakker ut Chromium til `chrome/`.
+2. Kopier sa hele mappen til minnepennen.
+
+Egendefinert sti kan settes med miljovariablene `CHROME_PATH` eller `EDGE_PATH`.
 
 ## Prosjektstruktur
 
@@ -141,12 +172,15 @@ public/
   admin-rush.js
   admin-duel.js
   styles.css
+node/
+  node.exe                (portabel Node.js, kun i USB_OPPDATERT)
+  LICENSE
 launcher.js
 server.js
-START_HER.bat
-START_ADMIN.bat
-START_SELECTOR.bat
-START_SERVER_ONLY.bat
+START_HT_GAME_KIOSK.bat   (spillvelger, kiosk)
+START_HARBOR_RUSH.bat
+START_1V1.bat
+START_AIR_HOCKEY.bat
 ```
 
 ## Driftstips

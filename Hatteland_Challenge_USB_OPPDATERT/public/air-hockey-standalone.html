@@ -502,7 +502,9 @@
       color: #ffdce1;
     }
 
-    .kiosk-back {
+    /* Skjul kiosk-navigasjonen under aktiv kamp saa et feiltrykk ikke
+       avbryter spillet - pause viser den igjen. */
+    body.game-running .kiosk-nav {
       display: none;
     }
 
@@ -851,7 +853,7 @@
       <div id="eventFeed" class="event-feed" aria-hidden="true"></div>
       <div class="table-label" aria-hidden="true">
         <span>Blue harbor</span>
-        <span>Power shots add pressure, goals score 1</span>
+        <span>Power shots add pressure, Goal flash doubles goals</span>
         <span>Gold harbor</span>
       </div>
       <div class="power-hud" aria-hidden="true">
@@ -860,7 +862,6 @@
       </div>
 
       <div id="startOverlay" class="overlay">
-        <a class="kiosk-back" href="/select.html">Back to kiosk</a>
         <section class="front-page" aria-label="HT Air Hockey start screen">
           <div class="front-copy">
             <div class="front-brand">
@@ -895,7 +896,6 @@
       </div>
 
       <div id="endOverlay" class="overlay hidden">
-        <a class="kiosk-back" href="/select.html">Back to kiosk</a>
         <div class="end-card">
           <p class="front-kicker">Final score</p>
           <h2 id="winnerText">Winner</h2>
@@ -966,19 +966,28 @@
           left: { x: 0, y: 0, px: 0, py: 0, r: 42, active: false },
           right: { x: 0, y: 0, px: 0, py: 0, r: 42, active: false },
           pointers: new Map(),
+          lastTouch: null,
           serveTo: Math.random() > 0.5 ? "left" : "right"
         };
       }
 
       function resizeCanvas() {
         const rect = canvas.getBoundingClientRect();
-        ratio = window.devicePixelRatio || 1;
+        ratio = Math.min(window.devicePixelRatio || 1, 2);
         width = Math.max(1, Math.round(rect.width));
         height = Math.max(1, Math.round(rect.height));
         canvas.width = Math.round(width * ratio);
         canvas.height = Math.round(height * ratio);
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-        resetPositions(false);
+        if (state.running) {
+          // Ikke teleporter brikkene midt i en kamp - bare hold alt innenfor bordet.
+          clampPaddle(state.left, "left");
+          clampPaddle(state.right, "right");
+          state.puck.x = Math.max(state.puck.r, Math.min(width - state.puck.r, state.puck.x));
+          state.puck.y = Math.max(state.puck.r, Math.min(height - state.puck.r, state.puck.y));
+        } else {
+          resetPositions(false);
+        }
         draw();
       }
 
@@ -1016,6 +1025,7 @@
         cancelAnimationFrame(animationId);
         state = createState();
         state.running = true;
+        document.body.classList.add("game-running");
         resetPositions(true);
         ui.startOverlay.classList.add("hidden");
         ui.endOverlay.classList.add("hidden");
@@ -1026,6 +1036,7 @@
 
       function endGame() {
         state.running = false;
+        document.body.classList.remove("game-running");
         cancelAnimationFrame(animationId);
         const left = state.score.left;
         const right = state.score.right;
@@ -1038,6 +1049,7 @@
       function togglePause() {
         if (!state.running) return;
         state.paused = !state.paused;
+        document.body.classList.toggle("game-running", !state.paused);
         lastTime = performance.now();
         updateUI();
         if (!state.paused) animationId = requestAnimationFrame(loop);
@@ -1045,6 +1057,7 @@
 
       function exitToStart() {
         cancelAnimationFrame(animationId);
+        document.body.classList.remove("game-running");
         state = createState();
         resetPositions(true);
         ui.endOverlay.classList.add("hidden");
@@ -1116,7 +1129,9 @@
         }
 
         for (const pointer of state.pointers.values()) {
-          const side = pointer.x < width / 2 ? state.left : state.right;
+          // Fingeren styrer siden den startet paa - krysser den midtlinjen
+          // skal den ikke kapre motstanderens brikke.
+          const side = pointer.side === "left" ? state.left : state.right;
           side.x = pointer.x;
           side.y = pointer.y;
           side.active = true;
@@ -1194,6 +1209,7 @@
         const paddleVx = (paddle.x - paddle.px) / Math.max(dt, 0.001);
         const paddleVy = (paddle.y - paddle.py) / Math.max(dt, 0.001);
         const hitSpeed = Math.hypot(paddleVx, paddleVy);
+        state.lastTouch = side;
         state.hitStreak[side] += 1;
         state.hitStreak[side === "left" ? "right" : "left"] = 0;
         const comboBoost = Math.min(5, 1 + Math.floor(state.hitStreak[side] / 3));
@@ -1230,7 +1246,7 @@
           power.life -= dt;
           power.pulse += dt * 5;
           if (Math.hypot(puck.x - power.x, puck.y - power.y) < puck.r + power.r) {
-            const side = puck.vx >= 0 ? "left" : "right";
+            const side = state.lastTouch || (puck.vx >= 0 ? "left" : "right");
             activatePowerUp(power, side);
             power.used = true;
           }
@@ -1263,11 +1279,12 @@
         }
         const goalFlash = state.activePower && state.activePower.type === "double" && state.activePower.side === side;
         const cleanShot = state.hitStreak[side] >= 5;
-        const points = 1;
+        const points = goalFlash ? 2 : 1;
         state.score[side] += points;
         state.combo[side === "left" ? "right" : "left"] = 1;
         state.hitStreak.left = 0;
         state.hitStreak.right = 0;
+        state.lastTouch = null;
         state.lastScorer = side;
         state.flash = 1;
         state.shake = 1;
@@ -1275,7 +1292,7 @@
         pulseScore(side);
         const label = goalFlash ? "FLASH GOAL" : cleanShot ? "CLEAN GOAL" : speedShot ? "SPEED GOAL" : "GOAL";
         addEffect(width * 0.5, height * 0.32, `+${points} ${label}`, side);
-        showEvent(`${side === "left" ? "Blue" : "Gold"} scores 1`, side);
+        showEvent(`${side === "left" ? "Blue" : "Gold"} scores ${points}`, side);
         state.serveTo = side === "left" ? "right" : "left";
         resetPositions(true);
       }
@@ -1616,13 +1633,18 @@
         if (!state.running || state.paused) return;
         event.preventDefault();
         canvas.setPointerCapture(event.pointerId);
-        state.pointers.set(event.pointerId, pointerPosition(event));
+        const position = pointerPosition(event);
+        position.side = position.x < width / 2 ? "left" : "right";
+        state.pointers.set(event.pointerId, position);
       }
 
       function onPointerMove(event) {
-        if (!state.pointers.has(event.pointerId)) return;
+        const existing = state.pointers.get(event.pointerId);
+        if (!existing) return;
         event.preventDefault();
-        state.pointers.set(event.pointerId, pointerPosition(event));
+        const position = pointerPosition(event);
+        position.side = existing.side;
+        state.pointers.set(event.pointerId, position);
       }
 
       function onPointerEnd(event) {
@@ -1630,15 +1652,47 @@
       }
 
       window.addEventListener("resize", resizeCanvas);
-      ui.startButton.addEventListener("click", startGame);
-      ui.restartButton.addEventListener("click", startGame);
-      ui.pauseButton.addEventListener("click", togglePause);
-      ui.exitGameButton.addEventListener("click", exitToStart);
+      // Bruk pointerup, ikke click: click kommer bare fra primaerpekeren, saa
+      // knappene ville vaert dode mens den andre spilleren tar paa skjermen.
+      function bindTap(element, handler) {
+        element.addEventListener("pointerup", (event) => {
+          event.preventDefault();
+          handler(event);
+        });
+      }
+
+      bindTap(ui.startButton, startGame);
+      bindTap(ui.restartButton, startGame);
+      bindTap(ui.pauseButton, togglePause);
+      bindTap(ui.exitGameButton, exitToStart);
       canvas.addEventListener("pointerdown", onPointerDown);
       canvas.addEventListener("pointermove", onPointerMove);
       canvas.addEventListener("pointerup", onPointerEnd);
       canvas.addEventListener("pointercancel", onPointerEnd);
       canvas.addEventListener("lostpointercapture", onPointerEnd);
+
+      // Kiosk: ingen kontekstmeny eller lenke-dragging ved lange trykk.
+      document.addEventListener("contextmenu", (event) => event.preventDefault());
+      document.addEventListener("dragstart", (event) => event.preventDefault());
+
+      // Attract-modus: en glemt sluttskjerm gaar tilbake til startskjermen av seg selv.
+      const IDLE_RESET_MS = 90000;
+      let idleTimer = null;
+
+      function armIdleReset() {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (!state.running && ui.startOverlay.classList.contains("hidden")) {
+            exitToStart();
+          }
+          armIdleReset();
+        }, IDLE_RESET_MS);
+      }
+
+      ["pointerdown", "pointermove", "keydown"].forEach((eventName) => {
+        window.addEventListener(eventName, armIdleReset, { passive: true });
+      });
+      armIdleReset();
 
       resizeCanvas();
       updateUI();

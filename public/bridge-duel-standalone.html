@@ -513,6 +513,69 @@
       box-shadow: 0 0 28px rgba(255, 93, 108, 0.3);
     }
 
+    .pause-button {
+      position: absolute;
+      right: 14px;
+      bottom: 12px;
+      z-index: 4;
+      min-width: 120px;
+      min-height: 48px;
+      padding: 0 18px;
+      border: 1px solid rgba(79, 227, 255, 0.34);
+      border-radius: 12px;
+      background: rgba(3, 13, 22, 0.74);
+      color: white;
+      font-size: 12px;
+      font-weight: 950;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+    }
+
+    .pause-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      z-index: 6;
+      place-items: center;
+      background: rgba(2, 10, 18, 0.78);
+      backdrop-filter: blur(6px);
+    }
+
+    .pause-overlay.active {
+      display: grid;
+    }
+
+    .pause-panel {
+      display: grid;
+      gap: 14px;
+      justify-items: center;
+      padding: 34px 48px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 18px;
+      background: rgba(3, 13, 22, 0.92);
+      box-shadow: 0 24px 72px rgba(0, 0, 0, 0.44);
+      color: white;
+      text-align: center;
+    }
+
+    .pause-panel span {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.66);
+    }
+
+    .pause-panel strong {
+      font-size: 30px;
+      font-weight: 950;
+    }
+
+    body.game-running .kiosk-nav {
+      display: none;
+    }
+
 
     @keyframes readyPulse {
       0%,
@@ -1280,9 +1343,8 @@
         </div>
       </div>
       <div id="startOverlay" class="overlay start-overlay">
-        <a class="kiosk-back" href="/select.html">Back to kiosk</a>
-        <button class="edge-start edge-start-left" data-start-game onclick="window.startBridgeDuel && window.startBridgeDuel(event)">Player 1 Start</button>
-        <button class="edge-start edge-start-right" data-start-game onclick="window.startBridgeDuel && window.startBridgeDuel(event)">Player 2 Start</button>
+        <button class="edge-start edge-start-left" data-start-game type="button">Player 1 Start</button>
+        <button class="edge-start edge-start-right" data-start-game type="button">Player 2 Start</button>
         <section class="front-page" aria-label="Bridge Duel start screen">
           <div class="front-copy">
             <div class="front-brand">
@@ -1324,7 +1386,7 @@
             </div>
 
             <div class="front-actions">
-              <button id="startButton" class="start-button" type="button" onclick="window.startBridgeDuel && window.startBridgeDuel(event)">Start Duel</button>
+              <button id="startButton" class="start-button" type="button">Start Duel</button>
             </div>
             <p id="startError" class="sub" aria-live="polite"></p>
             <p class="front-proof">Powered by Hatteland Technology • Precision under pressure</p>
@@ -1349,12 +1411,12 @@
         </section>
       </div>
       <div id="endOverlay" class="overlay hidden">
-        <button class="edge-start edge-start-left" data-start-game onclick="window.startBridgeDuel && window.startBridgeDuel(event)">Play Again</button>
-        <button class="edge-start edge-start-right" data-start-game onclick="window.startBridgeDuel && window.startBridgeDuel(event)">Play Again</button>
+        <button class="edge-start edge-start-left" data-start-game type="button">Play Again</button>
+        <button class="edge-start edge-start-right" data-start-game type="button">Play Again</button>
         <div class="overlay-card">
           <h1 id="winnerText">Winner</h1>
           <p id="finalText">Final score</p>
-          <button id="restartButton" class="start-button" onclick="window.startBridgeDuel && window.startBridgeDuel(event)">Play Again</button>
+          <button id="restartButton" class="start-button" type="button">Play Again</button>
         </div>
       </div>
     </section>
@@ -1431,7 +1493,7 @@
       spawnIntervalSeconds: 1.55,
       finalSurgeSeconds: 15,
       finalSurgeSpawnFactorPercent: 82,
-      attackDurationSeconds: 7,
+      attackDurationSeconds: 5,
       attackMaxEnergy: 100,
       correctDockPoints: 30,
       comboBonusPerDock: 8,
@@ -1450,12 +1512,12 @@
       beaconScorePoints: 120,
       beaconSpawnMinSeconds: 9,
       beaconSpawnMaxSeconds: 13,
-      trafficVessels: 4,
-      stormSpeedMultiplierPercent: 240,
-      stormExistingShipBoostPercent: 145,
-      fogOpacityPercent: 62,
-      glitchIntensityPercent: 72,
-      trafficDockHeight: 48,
+      trafficVessels: 2,
+      stormSpeedMultiplierPercent: 175,
+      stormExistingShipBoostPercent: 118,
+      fogOpacityPercent: 24,
+      glitchIntensityPercent: 40,
+      trafficDockHeight: 60,
       normalDockHeight: 64,
       enablePriorityShips: true,
       priorityShipChancePercent: 22,
@@ -1468,6 +1530,7 @@
     };
 
     let duelSettings = Object.assign({}, DEFAULT_DUEL_SETTINGS);
+    let pendingDuelSettings = null;
     let GAME_SECONDS = duelSettings.durationSeconds;
     let ATTACK_DURATION_MS = duelSettings.attackDurationSeconds * 1000;
     let ATTACK_MAX = duelSettings.attackMaxEnergy;
@@ -1599,13 +1662,15 @@
           if (!payload) {
             return;
           }
-          const wasRunning = state && state.running;
-          applyDuelSettings(payload.duelGame || {});
-          if (!wasRunning) {
-            state = createInitialState();
-            updateUI();
-            render();
+          if (state && state.running) {
+            // Ikke bytt regler midt i en runde - vent til neste start.
+            pendingDuelSettings = payload.duelGame || {};
+            return;
           }
+          applyDuelSettings(payload.duelGame || {});
+          state = createInitialState();
+          updateUI();
+          render();
         })
         .catch(() => {
           applyDuelSettings();
@@ -1614,7 +1679,7 @@
 
     function currentSpeedMultiplier(player) {
       if (state.effects[player].type === "storm") {
-        return percent(duelSettings.stormSpeedMultiplierPercent || 240);
+        return percent(duelSettings.stormSpeedMultiplierPercent || 175);
       }
 
       if (state.effects[player].type === "traffic") {
@@ -1638,12 +1703,14 @@
     }
 
     function attackDescription(type) {
+      const seconds = Math.round(ATTACK_DURATION_MS / 1000);
+      const vessels = Math.max(1, Math.round(Number(duelSettings.trafficVessels || 2)));
       return {
-        storm: "enemy ships surge and drift in heavy wind for 7s",
-        fog: "enemy harbor gets thick fog and tighter docking for 7s",
-        traffic: "four traffic vessels cross enemy harbor",
-        glitch: "enemy route drawing drifts hard for 7s"
-      }[type] || "enemy disruption for 7s";
+        storm: `enemy ships surge and drift in heavy wind for ${seconds}s`,
+        fog: `enemy harbor gets thick fog and tighter docking for ${seconds}s`,
+        traffic: `${vessels} traffic vessel${vessels === 1 ? "" : "s"} cross enemy harbor`,
+        glitch: `enemy route drawing drifts hard for ${seconds}s`
+      }[type] || `enemy disruption for ${seconds}s`;
     }
 
     function nextAttackAfter(type) {
@@ -1842,7 +1909,7 @@
       }
 
       if (attack === "storm") {
-        const boost = percent(duelSettings.stormExistingShipBoostPercent || 145);
+        const boost = percent(duelSettings.stormExistingShipBoostPercent || 118);
         state.ships
           .filter((ship) => ship.player === target)
           .forEach((ship) => {
@@ -2512,7 +2579,7 @@
         const remaining = Math.max(0, Math.ceil((state.effects[player].until - now) / 1000));
 
         if (effect === "fog") {
-          const fogAlpha = Math.min(0.88, percent(duelSettings.fogOpacityPercent || 62));
+          const fogAlpha = Math.min(0.88, percent(duelSettings.fogOpacityPercent || 24));
           ctx.fillStyle = `rgba(218, 239, 245, ${fogAlpha})`;
           ctx.fillRect(b.x, b.y, b.w, b.h);
           ctx.fillStyle = `rgba(218, 239, 245, ${Math.min(0.66, fogAlpha + 0.08)})`;
@@ -2628,13 +2695,13 @@
       const player = x < rect.width / 2 ? 1 : 2;
 
       if (hasEffect(player, "fog")) {
-        const fogFactor = percent(duelSettings.fogOpacityPercent || 62);
+        const fogFactor = percent(duelSettings.fogOpacityPercent || 24);
         x += Math.sin(y * 0.045 + performance.now() * 0.003) * 26 * fogFactor;
         y += Math.cos(x * 0.04 + performance.now() * 0.003) * 18 * fogFactor;
       }
 
       if (hasEffect(player, "glitch")) {
-        const glitchFactor = percent(duelSettings.glitchIntensityPercent || 72);
+        const glitchFactor = percent(duelSettings.glitchIntensityPercent || 40);
         x += Math.sin(y * 0.08 + performance.now() * 0.012) * 85 * glitchFactor;
         y += Math.cos(x * 0.07 + performance.now() * 0.009) * 52 * glitchFactor;
       }
@@ -2755,6 +2822,7 @@
       state.paused = false;
       ui.pauseOverlay.classList.remove("active");
       state.running = false;
+      document.body.classList.remove("game-running");
       cancelAnimationFrame(animationId);
       state = createInitialState();
       ui.endOverlay.classList.add("hidden");
@@ -2771,8 +2839,13 @@
       if (ui.startError) ui.startError.textContent = "";
       clearHoldExit();
       cancelAnimationFrame(animationId);
+      if (pendingDuelSettings) {
+        applyDuelSettings(pendingDuelSettings);
+        pendingDuelSettings = null;
+      }
       state = createInitialState();
       state.running = true;
+      document.body.classList.add("game-running");
       state.paused = false;
       ui.pauseOverlay.classList.remove("active");
       lastTime = performance.now();
@@ -2802,6 +2875,7 @@
       state.paused = false;
       ui.pauseOverlay.classList.remove("active");
       state.running = false;
+      document.body.classList.remove("game-running");
       const p1 = state.scores[1];
       const p2 = state.scores[2];
       const diff = Math.abs(p1 - p2);
@@ -2835,6 +2909,7 @@
       state.drags.clear();
       clearHoldExit();
       ui.pauseOverlay.classList.add("active");
+      document.body.classList.remove("game-running");
     }
 
     function resumeGame() {
@@ -2850,6 +2925,7 @@
         state.nextBeacon[player] += pausedSeconds;
       }
       ui.pauseOverlay.classList.remove("active");
+      document.body.classList.add("game-running");
     }
 
     function requestStartGame(event) {
@@ -2866,20 +2942,25 @@
     }
 
     window.startBridgeDuel = requestStartGame;
-    ["touchend", "click"].forEach((eventName) => {
-      ui.startButton.addEventListener(eventName, requestStartGame, false);
-      ui.restartButton.addEventListener(eventName, requestStartGame, false);
-    });
-    ui.pauseButton.addEventListener("click", pauseGame);
-    ui.resumeButton.addEventListener("click", resumeGame);
-    ui.exitGameButton.addEventListener("click", exitToStart);
-    document.querySelectorAll("[data-start-game]").forEach((button) => {
-      ["touchend", "click"].forEach((eventName) => {
-        button.addEventListener(eventName, requestStartGame, false);
+    // Bruk pointerup, ikke click: click kommer bare fra primaerpekeren, saa
+    // knappene ville vaert dode naar den andre spilleren allerede tar paa skjermen.
+    function bindTap(element, handler) {
+      element.addEventListener("pointerup", (event) => {
+        event.preventDefault();
+        handler(event);
       });
+    }
+
+    bindTap(ui.startButton, requestStartGame);
+    bindTap(ui.restartButton, requestStartGame);
+    bindTap(ui.pauseButton, pauseGame);
+    bindTap(ui.resumeButton, resumeGame);
+    bindTap(ui.exitGameButton, exitToStart);
+    document.querySelectorAll("[data-start-game]").forEach((button) => {
+      bindTap(button, requestStartGame);
     });
-    ui.attackP1.addEventListener("click", () => sendAttack(1));
-    ui.attackP2.addEventListener("click", () => sendAttack(2));
+    bindTap(ui.attackP1, () => sendAttack(1));
+    bindTap(ui.attackP2, () => sendAttack(2));
     canvas.addEventListener("pointerdown", onPointerDown);
     canvas.addEventListener("pointermove", onPointerMove);
     canvas.addEventListener("pointerup", onPointerUp);
@@ -2910,6 +2991,29 @@
       resizeCanvas();
       render();
     });
+
+    // Kiosk: ingen kontekstmeny eller lenke-dragging ved lange trykk.
+    document.addEventListener("contextmenu", (event) => event.preventDefault());
+    document.addEventListener("dragstart", (event) => event.preventDefault());
+
+    // Attract-modus: en glemt sluttskjerm gaar tilbake til startskjermen av seg selv.
+    const IDLE_RESET_MS = 90000;
+    let idleTimer = null;
+
+    function armIdleReset() {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        if (!state.running && ui.startOverlay.classList.contains("hidden")) {
+          exitToStart();
+        }
+        armIdleReset();
+      }, IDLE_RESET_MS);
+    }
+
+    ["pointerdown", "pointermove", "keydown"].forEach((eventName) => {
+      window.addEventListener(eventName, armIdleReset, { passive: true });
+    });
+    armIdleReset();
 
     state = createInitialState();
     resizeCanvas();

@@ -717,7 +717,11 @@ function validateStandaloneEntry(payload = {}) {
 
 // Serve only files under public/ so config and entry data are never exposed directly.
 function serveStatic(requestPath, response) {
-  const requestedPath = requestPath === "/" ? getDefaultRoute() : requestPath;
+  let requestedPath = requestPath === "/" ? getDefaultRoute() : requestPath;
+
+  if (requestedPath === "/favicon.ico") {
+    requestedPath = "/assets/logo.svg";
+  }
   const safePath = path.normalize(decodeURIComponent(requestedPath)).replace(/^(\.\.[/\\])+/, "");
   const filePath = path.join(PUBLIC_DIR, safePath);
 
