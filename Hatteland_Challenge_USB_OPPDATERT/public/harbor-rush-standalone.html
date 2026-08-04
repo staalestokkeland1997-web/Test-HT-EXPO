@@ -1935,16 +1935,25 @@
     function drawRadarBackground() {
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;
+
+      // Skjermen kan vaere skjult (display:none) naar dette kalles ved
+      // oppstart. Da er bredde/hoyde 0, og ring-lokka under ville faatt
+      // steg 0 og fryst hele siden. Hopp over tegning til vi har areal.
+      if (w <= 0 || h <= 0) {
+        return;
+      }
+
       const cx = w * 0.5;
       const cy = h * 0.54;
       const radius = Math.min(w, h) * 0.46;
+      const ringStep = Math.max(1, radius * 0.2);
       const sweep = (performance.now() * 0.00055) % (Math.PI * 2);
 
       ctx.save();
       ctx.globalAlpha = 0.34;
       ctx.strokeStyle = "rgba(104, 242, 166, 0.16)";
       ctx.lineWidth = 1;
-      for (let r = radius * 0.2; r <= radius; r += radius * 0.2) {
+      for (let r = ringStep; r <= radius; r += ringStep) {
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.stroke();
