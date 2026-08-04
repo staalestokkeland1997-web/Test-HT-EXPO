@@ -25,6 +25,7 @@ const DEFAULT_KIOSK_CONFIG = {
       bridgeDuel: "/bridge-duel-standalone.html",
       airHockey: "/air-hockey-standalone.html",
       containerStacker: "/container-stacker-standalone.html",
+      fjordRunner: "/fjord-runner-standalone.html",
       sonarSequence: "/sonar-sequence-standalone.html",
       admin: "/admin.html",
       adminRush: "/admin-rush.html",
@@ -377,6 +378,7 @@ function normalizeDuelGameSettings(payload, currentDuelGame = {}) {
 // og gameId er det spillene sender inn sammen med score.
 const GAMES = {
   stacker: { label: "Container Stacker", configKey: "stackerGame" },
+  runner: { label: "Fjord Runner", configKey: "runnerGame" },
   rush: { label: "Harbor Rush", configKey: "game" },
   duel: { label: "Bridge Duel", configKey: "duelGame" },
   airhockey: { label: "HT Air Hockey", configKey: "airHockeyGame" },
@@ -412,6 +414,21 @@ const GAME_SCHEMAS = {
       timeLimitSeconds: { min: 20, max: 300, fallback: 90 }
     },
     booleans: { enableSway: true, enableTimeLimit: false }
+  },
+  runner: {
+    numbers: {
+      startSpeedPercent: { min: 50, max: 180, fallback: 100 },
+      speedRampPercent: { min: 0, max: 250, fallback: 100 },
+      maxSpeedPercent: { min: 110, max: 320, fallback: 220 },
+      obstacleDensityPercent: { min: 40, max: 180, fallback: 100 },
+      cargoDensityPercent: { min: 0, max: 200, fallback: 100 },
+      lives: { min: 1, max: 6, fallback: 3 },
+      cargoPoints: { min: 1, max: 200, fallback: 25 },
+      distancePointsPer100m: { min: 0, max: 100, fallback: 10 },
+      streakBonusPercent: { min: 0, max: 300, fallback: 100 },
+      shieldSeconds: { min: 0, max: 6, fallback: 2 }
+    },
+    booleans: { enableJump: true, enableWeather: true }
   },
   sonar: {
     numbers: {
@@ -457,6 +474,7 @@ function publicConfig(config) {
     duelGame: config.duelGame,
     airHockeyGame: config.airHockeyGame || {},
     stackerGame: config.stackerGame || {},
+    runnerGame: config.runnerGame || {},
     sonarGame: config.sonarGame || {},
     privacy: config.privacy,
     theme: config.theme

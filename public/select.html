@@ -473,7 +473,7 @@
       <section class="board">
         <div class="headline">
           <h2>Pick your challenge.</h2>
-          <p id="tagline">Five branded touch games built for the stand. Every round takes about a minute.</p>
+          <p id="tagline">Six branded touch games built for the stand. Every round takes about a minute.</p>
         </div>
 
         <div class="grid" id="gameGrid">
@@ -495,26 +495,35 @@
               <p>Drop containers from the swinging crane. Every overhang breaks off and the stack gets narrower.</p>
             </div>
             <div class="card-foot">
-              <div class="card-foot">
-              <div class="card-foot">
-              <div class="card-foot">
-              <div class="card-foot">
               <span class="card-go">Play</span>
-              <span class="card-best" data-best="sonar"><em>No score yet</em></span>
-            </div>
-              <span class="card-best" data-best="airhockey"><em>No score yet</em></span>
-            </div>
-              <span class="card-best" data-best="duel"><em>No score yet</em></span>
-            </div>
-              <span class="card-best" data-best="rush"><em>No score yet</em></span>
-            </div>
               <span class="card-best" data-best="stacker"><em>No score yet</em></span>
+            </div>
+          </button>
+
+          <button class="card" type="button" data-game="runner" style="--accent: var(--blue)">
+            <div class="card-top">
+              <span class="card-index">02</span>
+              <span class="card-tag">Endless</span>
+            </div>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 18h18l-2 3H5z" />
+              <path d="M5 18l1.5-5h11L19 18" />
+              <path d="M12 13V6" />
+              <path d="M12 7h5l-2 2.5L17 12h-5" />
+            </svg>
+            <div>
+              <h3>Fjord Runner</h3>
+              <p>Steer the workboat through the shipping channel. Dodge buoys, grab cargo, never slow down.</p>
+            </div>
+            <div class="card-foot">
+              <span class="card-go">Play</span>
+              <span class="card-best" data-best="runner"><em>No score yet</em></span>
             </div>
           </button>
 
           <button class="card" type="button" data-game="rush" style="--accent: var(--blue)">
             <div class="card-top">
-              <span class="card-index">02</span>
+              <span class="card-index">03</span>
               <span class="card-tag">Reflex</span>
             </div>
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -527,12 +536,15 @@
               <h3>Harbor Rush</h3>
               <p>Lock signals and secure cargo before the clock runs out. One player, one record to beat.</p>
             </div>
-            <span class="card-go">Play</span>
+            <div class="card-foot">
+              <span class="card-go">Play</span>
+              <span class="card-best" data-best="rush"><em>No score yet</em></span>
+            </div>
           </button>
 
           <button class="card" type="button" data-game="duel" style="--accent: var(--red)">
             <div class="card-top">
-              <span class="card-index">03</span>
+              <span class="card-index">04</span>
               <span class="card-tag">1 vs 1</span>
             </div>
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -544,12 +556,15 @@
               <h3>Bridge Duel</h3>
               <p>Two operators, one harbor. Draw routes, build combos and send storms at the other side.</p>
             </div>
-            <span class="card-go">Play</span>
+            <div class="card-foot">
+              <span class="card-go">Play</span>
+              <span class="card-best" data-best="duel"><em>No score yet</em></span>
+            </div>
           </button>
 
           <button class="card" type="button" data-game="airhockey" style="--accent: var(--green)">
             <div class="card-top">
-              <span class="card-index">04</span>
+              <span class="card-index">05</span>
               <span class="card-tag">1 vs 1</span>
             </div>
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -562,12 +577,15 @@
               <h3>HT Air Hockey</h3>
               <p>Fast branded arcade air hockey. Sharp reactions, power-ups and a very short learning curve.</p>
             </div>
-            <span class="card-go">Play</span>
+            <div class="card-foot">
+              <span class="card-go">Play</span>
+              <span class="card-best" data-best="airhockey"><em>No score yet</em></span>
+            </div>
           </button>
 
           <button class="card" type="button" data-game="sonar" style="--accent: var(--violet)">
             <div class="card-top">
-              <span class="card-index">05</span>
+              <span class="card-index">06</span>
               <span class="card-tag">Memory</span>
             </div>
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -581,7 +599,10 @@
               <h3>Sonar Sequence</h3>
               <p>Watch the sonar pings, then repeat them. The pattern grows until you lose the signal.</p>
             </div>
-            <span class="card-go">Play</span>
+            <div class="card-foot">
+              <span class="card-go">Play</span>
+              <span class="card-best" data-best="sonar"><em>No score yet</em></span>
+            </div>
           </button>
         </div>
       </section>
@@ -601,6 +622,7 @@
       (function () {
         var PATHS = {
           stacker: "/container-stacker-standalone.html",
+          runner: "/fjord-runner-standalone.html",
           rush: "/harbor-rush-standalone.html",
           duel: "/bridge-duel-standalone.html",
           airhockey: "/air-hockey-standalone.html",
