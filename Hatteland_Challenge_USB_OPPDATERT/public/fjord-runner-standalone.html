@@ -784,6 +784,7 @@
         var lastTime = 0;
         var holdExitTimer = null;
         var holdExitProgressTimer = null;
+        var endOverlayTimer = null;
         var HOLD_EXIT_MS = 1200;
         var idleTimer = null;
         var IDLE_RESET_MS = 90000;
@@ -820,6 +821,9 @@
         }
 
         function zoneAt(distance) {
+          // Vaer-syklusen kan slaas av fra admin - da blir det morgenfjord
+          // hele runden.
+          if (!settings.enableWeather) distance = 0;
           var lower = ZONES[0];
           var upper = ZONES[ZONES.length - 1];
 
@@ -848,6 +852,7 @@
         }
 
         function zoneNameFor(distance) {
+          if (!settings.enableWeather) distance = 0;
           var name = ZONES[0].name;
           for (var i = 0; i < ZONES.length; i += 1) {
             if (distance >= ZONES[i].at) name = ZONES[i].name;
@@ -1064,6 +1069,9 @@
         }
 
         function update(dt) {
+          // Ingen tilstandsendringer etter at runden er over - ellers kan
+          // en sen last i samme frame endre score etter at den er laast.
+          if (state.over) return;
           state.elapsed += dt * 1000;
           state.wavePhase += dt;
           state.shake = Math.max(0, state.shake - dt * 3);
@@ -1095,16 +1103,21 @@
           var boatLaneExact = state.laneOffset;
 
           state.entities = state.entities.filter(function (entity) {
+            // Svept vindu: paa hoy fart kan z hoppe forbi baaten paa en
+            // treg frame, saa sjekk hele strekningen fra forrige posisjon.
+            var previousZ = entity.z;
             entity.z -= state.speed * dt;
 
-            if (entity.z < BOAT_Z + 0.9 && entity.z > BOAT_Z - 0.9) {
+            if (entity.z < BOAT_Z + 0.9 && previousZ > BOAT_Z - 0.9) {
               var laneDistance = Math.abs(entity.lane - boatLaneExact);
 
               if (entity.kind === "cargo" && !entity.taken && laneDistance < 0.55) {
                 collect(entity);
               }
 
-              if (entity.kind === "obstacle" && !entity.hit && laneDistance < 0.6) {
+              // 0.45, ikke 0.6: baaten er visuelt smalere enn et helt lop,
+              // og med 0.6 kunne den treffe i to lop samtidig midt i bytte.
+              if (entity.kind === "obstacle" && !entity.hit && laneDistance < 0.45) {
                 // Lave hindringer kan hoppes over.
                 if (!(entity.low && jumping)) {
                   entity.hit = true;
@@ -1596,6 +1609,10 @@
             settings = pendingSettings;
             pendingSettings = null;
           }
+          clearTimeout(endOverlayTimer);
+          if (document.activeElement && document.activeElement.blur) {
+            document.activeElement.blur();
+          }
           state = createState();
           state.running = true;
           document.body.classList.add("game-running");
@@ -1621,7 +1638,12 @@
           clearHoldExit();
           ui.pauseOverlay.classList.add("hidden");
 
-          var finalScore = state.displayScore || state.score;
+          // Regn sluttsummen fra live-verdier - displayScore kan henge en
+          // frame etter naar doden inntreffer midt i en oppdatering.
+          var finalScore = Math.min(
+            99999,
+            state.score + Math.floor(state.distance / 100) * Number(settings.distancePointsPer100m || 10)
+          );
           var record = getRecord();
           var isRecord = finalScore > record;
           rememberRecord(finalScore);
@@ -1648,8 +1670,13 @@
 
           state.finalScore = finalScore;
 
-          setTimeout(function () {
-            ui.endOverlay.classList.remove("hidden");
+          clearTimeout(endOverlayTimer);
+          var endedState = state;
+          endOverlayTimer = setTimeout(function () {
+            // Vis bare sluttskjermen hvis vi fortsatt er i samme runde.
+            if (state === endedState) {
+              ui.endOverlay.classList.remove("hidden");
+            }
           }, 700);
 
           refreshBoard();
@@ -1658,6 +1685,7 @@
         function exitToStart() {
           cancelAnimationFrame(animationId);
           clearHoldExit();
+          clearTimeout(endOverlayTimer);
           document.body.classList.remove("game-running");
           state = createState();
           ui.pauseOverlay.classList.add("hidden");
@@ -1666,6 +1694,8 @@
           renderLives();
           updateHud();
           render();
+          // Hent ferske innstillinger naar vi er tilbake paa startskjermen.
+          loadSettings();
         }
 
         function pauseGame() {
@@ -1777,7 +1807,8 @@
               email: ui.email.value.trim(),
               phone: ui.phone.value.trim(),
               consent: true,
-              score: state.finalScore || state.score,
+              // Serveren avviser score over maxAcceptedScore.
+              score: Math.min(99999, state.finalScore || state.score),
               playedAt: new Date().toISOString()
             })
           })
@@ -1799,8 +1830,10 @@
               ui.saveButton.textContent = "Saved";
             })
             .catch(function () {
-              ui.message.textContent = "No server connection. The score stayed on this machine.";
-              ui.saveButton.textContent = "Saved locally";
+              // Ikke lås knappen ved nettverksglipp - la spilleren prove igjen.
+              ui.message.textContent = "No server connection. Tap to try again.";
+              ui.saveButton.disabled = false;
+              ui.saveButton.textContent = "Try again";
             });
         }
 
@@ -1820,8 +1853,9 @@
               }
 
               var next = Object.assign({}, DEFAULTS, payload.runnerGame || {});
-              if (state && state.running) {
-                // Ikke bytt regler midt i en runde - vent til neste start.
+              if (state && (state.running || state.over)) {
+                // Ikke bytt regler midt i en runde, og ikke nullstill
+                // staten mens sluttskjermen (med lagre-knappen) vises.
                 pendingSettings = next;
                 return;
               }
@@ -1897,7 +1931,18 @@
           ui.steerRight.classList.remove("pressed");
         });
 
+        // Slipp utenfor canvas (f.eks. mus dratt ut) skal ogsaa slukke pilene.
+        window.addEventListener("pointerup", function () {
+          ui.steerLeft.classList.remove("pressed");
+          ui.steerRight.classList.remove("pressed");
+        });
+
         window.addEventListener("keydown", function (event) {
+          var handled = ["ArrowLeft", "ArrowRight", "ArrowUp", " "].indexOf(event.key) !== -1;
+          if (!handled) return;
+          // Uten preventDefault ville mellomrom "klikke" den fortsatt
+          // fokuserte startknappen og restarte runden midt i spillet.
+          event.preventDefault();
           if (event.key === "ArrowLeft") steer(-1);
           if (event.key === "ArrowRight") steer(1);
           if (event.key === "ArrowUp" || event.key === " ") jump();
@@ -1942,7 +1987,8 @@
         function armIdleReset() {
           clearTimeout(idleTimer);
           idleTimer = setTimeout(function () {
-            if (state && !state.running && ui.startOverlay.classList.contains("hidden")) {
+            // Ogsaa et pauset og forlatt spill skal tilbake til start.
+            if (state && (state.paused || (!state.running && ui.startOverlay.classList.contains("hidden")))) {
               exitToStart();
             }
             armIdleReset();

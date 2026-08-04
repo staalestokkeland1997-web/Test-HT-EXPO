@@ -440,7 +440,7 @@ const GAME_SCHEMAS = {
       pointsPerStep: { min: 1, max: 100, fallback: 10 },
       speedUpPercent: { min: 0, max: 20, fallback: 4 }
     },
-    booleans: { enableSound: true, enableTimeout: true }
+    booleans: { enableTimeout: true }
   }
 };
 
@@ -747,6 +747,11 @@ function parseJsonBody(request) {
 
     request.on("error", reject);
   });
+}
+
+// Navn vises paa kiosk-leaderboards; fjern tegn som kan tolkes som HTML.
+function sanitizeName(value) {
+  return String(value || "").replace(/[<>]/g, "").trim().slice(0, 40);
 }
 
 function safeEquals(left, right) {
@@ -1086,7 +1091,7 @@ async function handleApi(request, response, url) {
     const now = new Date().toISOString();
     const entry = {
       id: crypto.randomUUID(),
-      name: String(payload.name || "").trim(),
+      name: sanitizeName(payload.name),
       email: String(payload.email || "").trim().toLowerCase(),
       phone: String(payload.phone || "").trim(),
       score: session.score,
@@ -1128,7 +1133,7 @@ async function handleApi(request, response, url) {
     const game = normalizeGameId(entryPayload.game) || DEFAULT_GAME_ID;
     const entry = {
       id: crypto.randomUUID(),
-      name: String(entryPayload.name).trim().slice(0, 40),
+      name: sanitizeName(entryPayload.name),
       email: String(entryPayload.email || "").trim().toLowerCase(),
       phone: String(entryPayload.phone || "").trim(),
       score,

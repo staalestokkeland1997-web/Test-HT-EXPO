@@ -1101,7 +1101,18 @@
         document.body.classList.toggle("game-running", !state.paused);
         lastTime = performance.now();
         updateUI();
-        if (!state.paused) animationId = requestAnimationFrame(loop);
+        if (!state.paused) {
+          // Avbryt et eventuelt ventende frame forst, ellers gir raske
+          // pause/fortsett-trykk to samtidige lokker og dobbel fart.
+          cancelAnimationFrame(animationId);
+          // Nullstill forrige posisjon saa en finger som ble holdt nede
+          // gjennom pausen ikke gir ett gigantisk slag ved fortsettelse.
+          for (const paddle of [state.left, state.right]) {
+            paddle.px = paddle.x;
+            paddle.py = paddle.y;
+          }
+          animationId = requestAnimationFrame(loop);
+        }
       }
 
       function exitToStart() {
@@ -1113,6 +1124,8 @@
         ui.startOverlay.classList.remove("hidden");
         updateUI();
         draw();
+        // Hent ferske innstillinger naar vi er tilbake paa startskjermen.
+        loadSettings();
       }
 
       function loop(now) {
@@ -1690,6 +1703,7 @@
       }
 
       function onPointerMove(event) {
+        if (state.paused) return;
         const existing = state.pointers.get(event.pointerId);
         if (!existing) return;
         event.preventDefault();
@@ -1733,7 +1747,8 @@
       function armIdleReset() {
         clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
-          if (!state.running && ui.startOverlay.classList.contains("hidden")) {
+          // Ogsaa et pauset og forlatt spill skal tilbake til start.
+          if (state.paused || (!state.running && ui.startOverlay.classList.contains("hidden"))) {
             exitToStart();
           }
           armIdleReset();

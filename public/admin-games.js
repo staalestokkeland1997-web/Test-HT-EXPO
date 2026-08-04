@@ -63,10 +63,7 @@ const TOGGLES = {
     { key: "enableJump", label: "Jump over low obstacles" },
     { key: "enableWeather", label: "Weather changes" }
   ],
-  sonar: [
-    { key: "enableTimeout", label: "Answer timeout" },
-    { key: "enableSound", label: "Sound" }
-  ],
+  sonar: [{ key: "enableTimeout", label: "Answer timeout" }],
   airhockey: [{ key: "enablePowerUps", label: "Power-ups" }]
 };
 
@@ -178,7 +175,6 @@ const PRESETS = {
       startLength: 1,
       pointsPerStep: 10,
       speedUpPercent: 2,
-      enableSound: true,
       enableTimeout: true
     },
     Normal: {
@@ -190,7 +186,6 @@ const PRESETS = {
       startLength: 1,
       pointsPerStep: 10,
       speedUpPercent: 4,
-      enableSound: true,
       enableTimeout: true
     },
     Hard: {
@@ -202,7 +197,6 @@ const PRESETS = {
       startLength: 2,
       pointsPerStep: 12,
       speedUpPercent: 7,
-      enableSound: true,
       enableTimeout: true
     }
   },

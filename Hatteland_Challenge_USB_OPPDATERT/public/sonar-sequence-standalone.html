@@ -658,12 +658,10 @@
           startLength: 1,
           pointsPerStep: 10,
           speedUpPercent: 4,
-          enableSound: true,
-          enableTimeout: true
+                    enableTimeout: true
         };
 
         var TONES = ["#4fe3ff", "#f5c84b", "#68f2a6", "#ff8f5d", "#9d8bff", "#ff5d6c", "#5de5c0", "#ff7bd0", "#9fe870"];
-        var FREQUENCIES = [262, 330, 392, 440, 523, 587, 659, 698, 784];
 
         var settings = Object.assign({}, DEFAULTS);
         var pendingSettings = null;
@@ -671,7 +669,6 @@
         var state = createState();
         var timers = [];
         var inputTimer = null;
-        var audioContext = null;
 
         function createState() {
           return {
@@ -682,6 +679,11 @@
             level: 0,
             sequence: [],
             inputIndex: 0,
+            // Vannmerke: hoyeste steg som allerede har gitt poeng dette
+            // nivaaet. Hindrer dobbel-scoring naar sekvensen replays
+            // etter pause.
+            scoredCount: 0,
+            betweenLevels: false,
             acceptingInput: false
           };
         }
@@ -723,27 +725,6 @@
           }
         }
 
-        function playTone(index, duration) {
-          if (!settings.enableSound) return;
-          var AudioContextClass = window.AudioContext || window.webkitAudioContext;
-          if (!AudioContextClass) return;
-
-          try {
-            audioContext = audioContext || new AudioContextClass();
-            var oscillator = audioContext.createOscillator();
-            var gain = audioContext.createGain();
-            oscillator.type = "sine";
-            oscillator.frequency.value = FREQUENCIES[index % FREQUENCIES.length];
-            gain.gain.value = 0.05;
-            oscillator.connect(gain);
-            gain.connect(audioContext.destination);
-            oscillator.start();
-            gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + duration / 1000);
-            oscillator.stop(audioContext.currentTime + duration / 1000);
-          } catch (error) {
-            /* lyd er valgfritt */
-          }
-        }
 
         function currentPingMs() {
           // Hvert nivaa strammer tempoet litt, med et gulv slik at det forblir lesbart.
@@ -755,7 +736,6 @@
           var node = nodes[index];
           if (!node) return;
           node.classList.add("is-lit");
-          playTone(index, duration);
           later(function () {
             node.classList.remove("is-lit");
           }, duration);
@@ -803,6 +783,8 @@
         }
 
         function nextLevel() {
+          state.betweenLevels = false;
+          state.scoredCount = 0;
           state.level += 1;
           var count = nodes.length;
           var additions = state.level === 1 ? Math.max(1, Number(settings.startLength || 1)) : 1;
@@ -829,13 +811,20 @@
 
           lightNode(index, 220);
           state.inputIndex += 1;
-          state.score += Number(settings.pointsPerStep || 10);
+
+          // Bare nye steg gir poeng - en replay etter pause skal ikke
+          // betale for steg som allerede er scoret.
+          if (state.inputIndex > state.scoredCount) {
+            state.score += Number(settings.pointsPerStep || 10);
+            state.scoredCount = state.inputIndex;
+          }
           updateHud();
 
           if (state.inputIndex >= state.sequence.length) {
             state.acceptingInput = false;
             clearTimeout(inputTimer);
             setPhase("Locked", "Level clear");
+            state.betweenLevels = true;
             later(nextLevel, 700);
           } else {
             armInputTimeout();
@@ -910,6 +899,8 @@
           ui.startOverlay.classList.remove("hidden");
           setPhase("Ready", "Sonar");
           updateHud();
+          // Hent ferske innstillinger naar vi er tilbake paa startskjermen.
+          loadSettings();
         }
 
         function pauseGame() {
@@ -926,8 +917,15 @@
           state.paused = false;
           ui.pauseOverlay.classList.add("hidden");
           document.body.classList.add("game-running");
-          // Spill sekvensen paa nytt saa spilleren ikke straffes for pausen.
-          playSequence();
+          if (state.betweenLevels) {
+            // Pausen avbrot overgangen til neste nivaa - fullfoer den,
+            // ellers kunne forrige nivaa replays for nye poeng.
+            nextLevel();
+          } else {
+            // Spill sekvensen paa nytt saa spilleren ikke straffes for
+            // pausen. Vannmerket hindrer dobbel-scoring.
+            playSequence();
+          }
         }
 
         function getRecord() {
@@ -1014,7 +1012,8 @@
               email: ui.email.value.trim(),
               phone: ui.phone.value.trim(),
               consent: true,
-              score: state.score,
+              // Serveren avviser score over maxAcceptedScore.
+              score: Math.min(99999, state.score),
               playedAt: new Date().toISOString()
             })
           })
@@ -1036,8 +1035,10 @@
               ui.saveButton.textContent = "Saved";
             })
             .catch(function () {
-              ui.message.textContent = "No server connection. The score stayed on this machine.";
-              ui.saveButton.textContent = "Saved locally";
+              // Ikke lås knappen ved nettverksglipp - la spilleren prove igjen.
+              ui.message.textContent = "No server connection. Tap to try again.";
+              ui.saveButton.disabled = false;
+              ui.saveButton.textContent = "Try again";
             });
         }
 
@@ -1102,7 +1103,8 @@
         function armIdleReset() {
           clearTimeout(idleTimer);
           idleTimer = setTimeout(function () {
-            if (!state.running && ui.startOverlay.classList.contains("hidden")) {
+            // Ogsaa et pauset og forlatt spill skal tilbake til start.
+            if (state.paused || (!state.running && ui.startOverlay.classList.contains("hidden"))) {
               exitToStart();
             }
             armIdleReset();

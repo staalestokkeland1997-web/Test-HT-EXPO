@@ -148,7 +148,6 @@
     "startLength": 1,
     "pointsPerStep": 10,
     "speedUpPercent": 4,
-    "enableSound": false,
     "enableTimeout": true
   },
   "privacy": {

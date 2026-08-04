@@ -1662,8 +1662,9 @@
           if (!payload) {
             return;
           }
-          if (state && state.running) {
-            // Ikke bytt regler midt i en runde - vent til neste start.
+          if (state && (state.running || !ui.endOverlay.classList.contains("hidden"))) {
+            // Ikke bytt regler midt i en runde, og ikke nullstill
+            // side-panelene mens sluttskjermen fortsatt vises.
             pendingDuelSettings = payload.duelGame || {};
             return;
           }
@@ -1885,6 +1886,9 @@
     }
 
     function sendAttack(fromPlayer) {
+      // Knappene ligger utenfor canvas-omraadet og dekkes ikke av
+      // pause-/sluttoverlayene, saa de maa sjekke spilltilstanden selv.
+      if (!state.running || state.paused) return;
       if (state.attack[fromPlayer] < ATTACK_MAX) return;
 
       const target = opponent(fromPlayer);
@@ -2685,7 +2689,11 @@
         update(dt, nowSeconds);
       }
       render();
-      animationId = requestAnimationFrame(gameLoop);
+      // Stopp naar duellen er over, ellers rendrer vi hele havna paa
+      // 60 fps bak sluttskjermen til evig tid.
+      if (state.running) {
+        animationId = requestAnimationFrame(gameLoop);
+      }
     }
 
     function pointerPosition(event) {
@@ -2833,6 +2841,8 @@
       ui.startOverlay.style.pointerEvents = "";
       updateUI();
       render();
+      // Hent ferske innstillinger naar vi er tilbake paa startskjermen.
+      loadDuelSettings();
     }
 
     function startGame() {
@@ -3003,7 +3013,8 @@
     function armIdleReset() {
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
-        if (!state.running && ui.startOverlay.classList.contains("hidden")) {
+        // Ogsaa et pauset og forlatt spill skal tilbake til start.
+        if (state.paused || (!state.running && ui.startOverlay.classList.contains("hidden"))) {
           exitToStart();
         }
         armIdleReset();

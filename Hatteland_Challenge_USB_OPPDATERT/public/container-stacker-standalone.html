@@ -964,12 +964,20 @@
 
           // Spillfeltet dekker bare midten av skjermen, slik at hele skipet
           // med baug og bro faar plass og det er synlig sjo paa begge sider.
+          // Nedre grense: ved et bittelite/skjult vindu kunne skalaen bli
+          // 0 eller negativ - da fryser tegne-lokkene og kameraet deler
+          // paa null.
           var scaleX = (view.w * 0.76) / WORLD_W;
           var scaleY = (baseline() - 76) / (BLOCK_H * VISIBLE_ROWS);
-          view.scale = Math.min(scaleX, scaleY);
+          view.scale = Math.max(0.05, Math.min(scaleX, scaleY));
           view.offsetX = (view.w - WORLD_W * view.scale) / 2;
 
           buildStars();
+          if (state) {
+            // Reframe taarnet etter rotasjon/resize, ellers star det feil
+            // til neste slipp.
+            updateCameraTarget();
+          }
           render();
         }
 
@@ -1074,7 +1082,9 @@
           var left = Math.max(moving.x, top.x);
           var right = Math.min(moving.x + moving.width, top.x + top.width);
           var overlap = right - left;
-          var offset = Math.abs(moving.x - top.x);
+          // Sammenlign sentrum, ikke venstrekant: en bred last som slippes
+          // midt paa skal telle som perfekt selv om kantene stikker utenfor.
+          var offset = Math.abs(moving.x + moving.width / 2 - (top.x + top.width / 2));
           var tolerance = Math.max(4, top.width * percent(settings.perfectTolerancePercent));
 
           // Utfallet avgjores i det containeren slippes; animasjonen viser det bare.
@@ -1118,6 +1128,8 @@
 
           var placedX = drop.left;
           var placedWidth = drop.overlap;
+          var overhangLeftWidth = Math.max(0, drop.left - moving.x);
+          var overhangRightWidth = Math.max(0, moving.x + moving.width - drop.right);
 
           if (drop.perfect) {
             var regain = Math.round((moving.width - drop.overlap) * percent(settings.perfectRegainPercent));
@@ -1138,17 +1150,32 @@
             state.combo = 0;
             state.perfectStreak = 0;
 
-            var overhangLeft = moving.x < drop.left;
-            state.debris.push({
-              x: overhangLeft ? moving.x : drop.right,
-              width: overhangLeft ? drop.left - moving.x : moving.x + moving.width - drop.right,
-              row: moving.row,
-              hue: moving.hue,
-              vy: 0,
-              vx: overhangLeft ? -80 : 80,
-              spin: overhangLeft ? -2.4 : 2.4,
-              angle: 0
-            });
+            // En bred last kan henge over paa BEGGE sider - slipp en bit
+            // per side som faktisk stikker utenfor.
+            if (overhangLeftWidth > 1) {
+              state.debris.push({
+                x: moving.x,
+                width: overhangLeftWidth,
+                row: moving.row,
+                hue: moving.hue,
+                vy: 0,
+                vx: -80,
+                spin: -2.4,
+                angle: 0
+              });
+            }
+            if (overhangRightWidth > 1) {
+              state.debris.push({
+                x: drop.right,
+                width: overhangRightWidth,
+                row: moving.row,
+                hue: moving.hue,
+                vy: 0,
+                vx: 80,
+                spin: 2.4,
+                angle: 0
+              });
+            }
           }
 
           var gained = Number(settings.basePoints || 10);
@@ -1933,8 +1960,13 @@
           ui.consent.checked = false;
 
           // La taarnet falle ferdig for resultatet legger seg over.
+          // Bind animasjonen til akkurat denne runden: starter spilleren
+          // paa nytt (eller gaar ut) mens den kjorer, skal den doe stille
+          // i stedet for aa poppe sluttskjermen over den nye runden.
+          var collapseState = state;
           var collapseUntil = performance.now() + 900;
           (function collapse(now) {
+            if (state !== collapseState) return;
             update(Math.min(0.05, (now - lastTime) / 1000 || 0));
             render();
             lastTime = now;
@@ -1960,6 +1992,8 @@
           updateCameraTarget();
           updateHud(false);
           render();
+          // Hent ferske innstillinger naar vi er tilbake paa startskjermen.
+          loadSettings();
         }
 
         function pauseGame() {
@@ -2081,7 +2115,8 @@
               email: ui.email.value.trim(),
               phone: ui.phone.value.trim(),
               consent: true,
-              score: state.score,
+              // Serveren avviser score over maxAcceptedScore.
+              score: Math.min(99999, state.score),
               playedAt: new Date().toISOString()
             })
           })
@@ -2103,8 +2138,10 @@
               ui.saveButton.textContent = "Saved";
             })
             .catch(function () {
-              ui.message.textContent = "No server connection. The score stayed on this machine.";
-              ui.saveButton.textContent = "Saved locally";
+              // Ikke lås knappen ved nettverksglipp - la spilleren prove igjen.
+              ui.message.textContent = "No server connection. Tap to try again.";
+              ui.saveButton.disabled = false;
+              ui.saveButton.textContent = "Try again";
             });
         }
 
@@ -2124,8 +2161,9 @@
               }
 
               var next = Object.assign({}, DEFAULTS, payload.stackerGame || {});
-              if (state && state.running) {
-                // Ikke bytt regler midt i en runde - vent til neste start.
+              if (state && (state.running || state.over)) {
+                // Ikke bytt regler midt i en runde, og ikke nullstill
+                // staten mens sluttskjermen (med lagre-knappen) vises.
                 pendingSettings = next;
                 return;
               }
@@ -2203,7 +2241,8 @@
         function armIdleReset() {
           clearTimeout(idleTimer);
           idleTimer = setTimeout(function () {
-            if (state && !state.running && ui.startOverlay.classList.contains("hidden")) {
+            // Ogsaa et pauset og forlatt spill skal tilbake til start.
+            if (state && (state.paused || (!state.running && ui.startOverlay.classList.contains("hidden")))) {
               exitToStart();
             }
             armIdleReset();

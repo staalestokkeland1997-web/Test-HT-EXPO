@@ -64,7 +64,9 @@
       align-items: center;
       justify-content: space-between;
       gap: 14px;
-      padding: 12px 16px;
+      /* Ekstra plass til hoyre saa den faste kiosk-navigasjonen ikke
+         legger seg over leaderboard- og lydknappene. */
+      padding: 12px 240px 12px 16px;
       border: 1px solid var(--line);
       border-radius: 14px;
       background:
@@ -1330,10 +1332,12 @@
       localStorage.setItem("harborRushStandaloneBoard", JSON.stringify(entries.slice(0, 10)));
     }
 
+    let serverTopScore = 0;
+
     function getRecord() {
       const board = getLeaderboard();
       const boardBest = Math.max(0, ...board.map((entry) => Number(entry.score || 0)));
-      return Math.max(boardBest, Number(localStorage.getItem("harborRushRecordScore") || 0));
+      return Math.max(serverTopScore, boardBest, Number(localStorage.getItem("harborRushRecordScore") || 0));
     }
 
     function rememberRecord(score) {
@@ -1355,8 +1359,14 @@
       }
 
       entries.forEach((entry, index) => {
+        // textContent, ikke innerHTML: navn kommer fra publikum og skal
+        // aldri tolkes som HTML.
         const li = document.createElement("li");
-        li.innerHTML = `<span>${index + 1}. ${entry.name}</span><strong>${entry.score}</strong>`;
+        const label = document.createElement("span");
+        const score = document.createElement("strong");
+        label.textContent = `${index + 1}. ${entry.name}`;
+        score.textContent = String(entry.score);
+        li.append(label, score);
         ui.leaderboardList.appendChild(li);
         if (index < 3) ui.miniBoard.appendChild(li.cloneNode(true));
       });
@@ -1375,7 +1385,9 @@
         }
 
         const payload = await response.json();
-        renderLeaderboard(payload.entries || []);
+        const entries = payload.entries || [];
+        serverTopScore = entries.length ? Number(entries[0].score || 0) : 0;
+        renderLeaderboard(entries);
       } catch (error) {
         renderLeaderboard();
       }
@@ -2191,7 +2203,11 @@
       lastTime = timestamp;
       update(dt);
       render();
-      animationId = requestAnimationFrame(loop);
+      // Stopp naar runden er over, ellers rendrer vi 60 fps bak
+      // resultatskjermen til evig tid.
+      if (state.running) {
+        animationId = requestAnimationFrame(loop);
+      }
     }
 
     function pauseGame() {
@@ -2287,6 +2303,10 @@
       ui.countdownOverlay.classList.add("hidden");
       showScreen("start");
       render();
+      // Kiosken staar paa i timevis: hent ferske innstillinger og
+      // toppliste hver gang vi er tilbake paa startskjermen.
+      loadConfig();
+      refreshLeaderboard();
     }
 
     function finishGame() {
@@ -2419,7 +2439,10 @@
     function armIdleReset() {
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
-        if (!state.running && !countdownTimer && screens.result.classList.contains("active")) {
+        // Ogsaa et pauset og forlatt spill skal tilbake til start.
+        if (state.paused) {
+          exitToStart();
+        } else if (!state.running && !countdownTimer && screens.result.classList.contains("active")) {
           showScreen("start");
           render();
         }
