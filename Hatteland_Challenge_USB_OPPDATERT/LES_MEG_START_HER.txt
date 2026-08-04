@@ -16,6 +16,7 @@ STARTE SPILLENE (dobbeltklikk en av disse)
 ------------------------------------------
    START_HT_GAME_KIOSK.bat     Spillvelger i kiosk/fullskjerm (anbefalt)
    START_CONTAINER_STACKER.bat Starter rett i Container Stacker
+   START_FJORD_RUNNER.bat      Starter rett i Fjord Runner
    START_HARBOR_RUSH.bat       Starter rett i Harbor Rush
    START_1V1.bat               Starter rett i Bridge Duel 1v1
    START_AIR_HOCKEY.bat        Starter rett i Air Hockey

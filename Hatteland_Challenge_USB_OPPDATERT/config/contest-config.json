@@ -26,7 +26,7 @@
   },
   "game": {
     "difficultyName": "Custom",
-    "soundDefaultEnabled": true,
+    "soundDefaultEnabled": false,
     "durationSeconds": 30,
     "countdownSeconds": 3,
     "goodTargetBasePoints": 10,
@@ -40,7 +40,7 @@
     "minTargetSize": 92,
     "maxTargetSize": 148,
     "scoreHighlightThreshold": 260,
-    "maxAcceptedScore": 9999,
+    "maxAcceptedScore": 99999,
     "registrationTimeoutSeconds": 600,
     "maxSessionAgeSeconds": 900,
     "enableNearMissWarnings": true,
@@ -124,6 +124,21 @@
     "enableSway": true,
     "enableTimeLimit": false
   },
+  "runnerGame": {
+    "difficultyName": "Normal",
+    "startSpeedPercent": 100,
+    "speedRampPercent": 100,
+    "maxSpeedPercent": 220,
+    "obstacleDensityPercent": 100,
+    "cargoDensityPercent": 100,
+    "lives": 3,
+    "cargoPoints": 25,
+    "distancePointsPer100m": 10,
+    "streakBonusPercent": 100,
+    "shieldSeconds": 2,
+    "enableJump": true,
+    "enableWeather": true
+  },
   "sonarGame": {
     "difficultyName": "Normal",
     "nodeCount": 6,
@@ -133,7 +148,7 @@
     "startLength": 1,
     "pointsPerStep": 10,
     "speedUpPercent": 4,
-    "enableSound": true,
+    "enableSound": false,
     "enableTimeout": true
   },
   "privacy": {

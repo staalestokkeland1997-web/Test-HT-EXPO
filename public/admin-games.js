@@ -24,6 +24,18 @@ const FIELDS = {
     { key: "perfectBonusPoints", label: "Perfect bonus", suffix: "", min: 0, max: 300 },
     { key: "maxComboBonus", label: "Max combo bonus", suffix: "", min: 0, max: 500 }
   ],
+  runner: [
+    { key: "lives", label: "Hulls", suffix: "", min: 1, max: 6 },
+    { key: "startSpeedPercent", label: "Start speed", suffix: "%", min: 50, max: 180 },
+    { key: "speedRampPercent", label: "Speed ramp", suffix: "%", min: 0, max: 250 },
+    { key: "maxSpeedPercent", label: "Top speed", suffix: "%", min: 110, max: 320 },
+    { key: "obstacleDensityPercent", label: "Obstacles", suffix: "%", min: 40, max: 180 },
+    { key: "cargoDensityPercent", label: "Cargo", suffix: "%", min: 0, max: 200 },
+    { key: "cargoPoints", label: "Points per cargo", suffix: "", min: 1, max: 200 },
+    { key: "distancePointsPer100m", label: "Points per 100 m", suffix: "", min: 0, max: 100 },
+    { key: "streakBonusPercent", label: "Streak bonus", suffix: "%", min: 0, max: 300 },
+    { key: "shieldSeconds", label: "Recovery time", suffix: "s", min: 0, max: 6 }
+  ],
   sonar: [
     { key: "nodeCount", label: "Contacts", suffix: "", min: 4, max: 9 },
     { key: "pingMs", label: "Ping length", suffix: "ms", min: 180, max: 1200 },
@@ -46,6 +58,10 @@ const TOGGLES = {
   stacker: [
     { key: "enableTimeLimit", label: "Use time limit" },
     { key: "enableSway", label: "Crane sway" }
+  ],
+  runner: [
+    { key: "enableJump", label: "Jump over low obstacles" },
+    { key: "enableWeather", label: "Weather changes" }
   ],
   sonar: [
     { key: "enableTimeout", label: "Answer timeout" },
@@ -103,6 +119,53 @@ const PRESETS = {
       timeLimitSeconds: 75,
       enableSway: true,
       enableTimeLimit: false
+    }
+  },
+  runner: {
+    Easy: {
+      difficultyName: "Easy",
+      startSpeedPercent: 80,
+      speedRampPercent: 60,
+      maxSpeedPercent: 165,
+      obstacleDensityPercent: 65,
+      cargoDensityPercent: 135,
+      lives: 4,
+      cargoPoints: 25,
+      distancePointsPer100m: 10,
+      streakBonusPercent: 120,
+      shieldSeconds: 3,
+      enableJump: true,
+      enableWeather: true
+    },
+    Normal: {
+      difficultyName: "Normal",
+      startSpeedPercent: 100,
+      speedRampPercent: 100,
+      maxSpeedPercent: 220,
+      obstacleDensityPercent: 100,
+      cargoDensityPercent: 100,
+      lives: 3,
+      cargoPoints: 25,
+      distancePointsPer100m: 10,
+      streakBonusPercent: 100,
+      shieldSeconds: 2,
+      enableJump: true,
+      enableWeather: true
+    },
+    Hard: {
+      difficultyName: "Hard",
+      startSpeedPercent: 125,
+      speedRampPercent: 160,
+      maxSpeedPercent: 290,
+      obstacleDensityPercent: 145,
+      cargoDensityPercent: 80,
+      lives: 2,
+      cargoPoints: 30,
+      distancePointsPer100m: 14,
+      streakBonusPercent: 140,
+      shieldSeconds: 1,
+      enableJump: true,
+      enableWeather: true
     }
   },
   sonar: {

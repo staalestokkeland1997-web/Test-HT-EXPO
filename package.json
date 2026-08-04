@@ -10,6 +10,7 @@
     "duel": "node launcher.js --duel",
     "airhockey": "node launcher.js --airhockey",
     "stacker": "node launcher.js --stacker",
+    "runner": "node launcher.js --runner",
     "sonar": "node launcher.js --sonar",
     "kiosk": "node launcher.js --kiosk"
   },

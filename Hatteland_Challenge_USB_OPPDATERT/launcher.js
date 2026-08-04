@@ -38,6 +38,12 @@ const MODES = {
     adminPath: "/admin-games.html",
     preferredPort: 3103
   },
+  runner: {
+    label: "Fjord Runner",
+    path: "/fjord-runner-standalone.html",
+    adminPath: "/admin-games.html",
+    preferredPort: 3106
+  },
   stacker: {
     label: "Container Stacker",
     path: "/container-stacker-standalone.html",
@@ -160,6 +166,7 @@ function ensureKioskFiles() {
     path.join(ROOT_DIR, "public", "bridge-duel-standalone.html"),
     path.join(ROOT_DIR, "public", "air-hockey-standalone.html"),
     path.join(ROOT_DIR, "public", "container-stacker-standalone.html"),
+    path.join(ROOT_DIR, "public", "fjord-runner-standalone.html"),
     path.join(ROOT_DIR, "public", "sonar-sequence-standalone.html")
   ];
 
@@ -190,6 +197,7 @@ function getMode() {
   if (process.argv.includes("--rush")) return "rush";
   if (process.argv.includes("--airhockey") || process.argv.includes("--air-hockey")) return "airhockey";
   if (process.argv.includes("--stacker")) return "stacker";
+  if (process.argv.includes("--runner")) return "runner";
   if (process.argv.includes("--sonar")) return "sonar";
   return "selector";
 }

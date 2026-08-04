@@ -4,11 +4,12 @@ Dette er en lokal kiosk-app for messebruk. Den kjorer paa en PC med Node.js, ute
 
 ## Innhold
 
-Fem touchspill med maritimt preg, alle med egen highscoreliste:
+Seks touchspill med maritimt preg, alle med egen highscoreliste:
 
 | Spill | Type | Fil |
 | --- | --- | --- |
 | Container Stacker | Presisjon, 1 spiller | `/container-stacker-standalone.html` |
+| Fjord Runner | Endless runner, 1 spiller | `/fjord-runner-standalone.html` |
 | Harbor Rush | Refleks, 1 spiller | `/harbor-rush-standalone.html` |
 | Bridge Duel | 1 mot 1 | `/bridge-duel-standalone.html` |
 | HT Air Hockey | 1 mot 1 | `/air-hockey-standalone.html` |
@@ -45,6 +46,13 @@ Der kan du per spill:
 Endringer trer i kraft ved neste runde. Et spill som allerede er i gang
 beholder reglene runden startet med.
 
+## Lyd
+
+Lyd er slaatt av som standard i hele kiosken fordi den uansett drukner i
+stoyen paa en messe. Harbor Rush har en lydknapp for den som vil ha den paa,
+og standardvalget styres av `game.soundDefaultEnabled` og `sonarGame.enableSound`
+i `config/contest-config.json`.
+
 ## Start
 
 Anbefalt paa messe-PC (starter spillvelger i kiosk/fullskjerm):
@@ -59,6 +67,7 @@ Vanlig terminalstart:
 npm start          # bare server (bruker config/kiosk-config.json)
 npm run launch     # server + nettleser med spillvelger
 npm run stacker    # start rett i Container Stacker
+npm run runner     # start rett i Fjord Runner
 npm run rush       # start rett i Harbor Rush
 npm run duel       # start rett i Bridge Duel 1v1
 npm run airhockey  # start rett i HT Air Hockey
@@ -81,6 +90,7 @@ http://127.0.0.1:3000/admin-games.html
 http://127.0.0.1:3000/admin-rush.html
 http://127.0.0.1:3000/admin-duel.html
 http://127.0.0.1:3000/container-stacker-standalone.html
+http://127.0.0.1:3000/fjord-runner-standalone.html
 http://127.0.0.1:3000/harbor-rush-standalone.html
 http://127.0.0.1:3000/bridge-duel-standalone.html
 http://127.0.0.1:3000/air-hockey-standalone.html
@@ -131,6 +141,10 @@ Viktige seksjoner i `contest-config.json`:
 
 - `game`: Harbor Rush settings.
 - `duelGame`: Bridge Duel 1v1 settings.
+- `airHockeyGame`: HT Air Hockey settings (rundetid, vinnerscore, fart).
+- `stackerGame`: Container Stacker settings (kranfart, bredde, perfekt-vindu).
+- `runnerGame`: Fjord Runner settings (fart, hindringer, last, antall skrog).
+- `sonarGame`: Sonar Sequence settings (antall kontakter, tempo, svartid).
 - `brand`: navn, logo, premie og lenker.
 - `admin.password`: passord for adminsidene.
 
@@ -163,9 +177,12 @@ Slik gjor du:
 2. Paa messe-PC-en: kopier mappen til harddisk, for eksempel `C:\HattelandChallenge`.
 3. Dobbeltklikk en startfil:
    - `START_HT_GAME_KIOSK.bat` (spillvelger, kiosk/fullskjerm)
+   - `START_CONTAINER_STACKER.bat`
+   - `START_FJORD_RUNNER.bat`
    - `START_HARBOR_RUSH.bat`
    - `START_1V1.bat`
    - `START_AIR_HOCKEY.bat`
+   - `START_SONAR.bat`
 
 Vil du bruke en annen arkitektur (x86/ARM64), bytt ut `node/node.exe` med riktig `node.exe` fra https://nodejs.org/dist/.
 
@@ -198,16 +215,18 @@ config/
 data/
   entries.json
 public/
-  index.html
+  select.html                       (kioskens forside)
+  container-stacker-standalone.html
+  fjord-runner-standalone.html
   harbor-rush-standalone.html
   bridge-duel-standalone.html
-  select.html
+  air-hockey-standalone.html
+  sonar-sequence-standalone.html
   admin.html
-  admin-rush.html
-  admin-duel.html
-  app.js
-  admin-rush.js
-  admin-duel.js
+  admin-games.html / admin-games.js (innstillinger + highscore per spill)
+  admin-rush.html / admin-rush.js
+  admin-duel.html / admin-duel.js
+  status.html / status.js
   styles.css
 node/
   node.exe                (portabel Node.js, kun i USB_OPPDATERT)
@@ -215,9 +234,12 @@ node/
 launcher.js
 server.js
 START_HT_GAME_KIOSK.bat   (spillvelger, kiosk)
+START_CONTAINER_STACKER.bat
+START_FJORD_RUNNER.bat
 START_HARBOR_RUSH.bat
 START_1V1.bat
 START_AIR_HOCKEY.bat
+START_SONAR.bat
 ```
 
 ## Driftstips
