@@ -1368,7 +1368,7 @@
         return;
       }
       try {
-        const response = await fetch("/api/leaderboard", { cache: "no-store" });
+        const response = await fetch("/api/leaderboard?game=rush", { cache: "no-store" });
 
         if (!response.ok) {
           throw new Error("No server leaderboard.");
@@ -1428,6 +1428,7 @@
       const email = ui.emailInput.value.trim();
       const phone = ui.phoneInput.value.trim();
       const entry = {
+        game: "rush",
         name,
         email,
         phone,

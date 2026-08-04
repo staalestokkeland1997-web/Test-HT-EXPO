@@ -14,10 +14,12 @@ GJORE KLAR PC-EN
 
 STARTE SPILLENE (dobbeltklikk en av disse)
 ------------------------------------------
-   START_HT_GAME_KIOSK.bat   Spillvelger i kiosk/fullskjerm (anbefalt)
-   START_HARBOR_RUSH.bat     Starter rett i Harbor Rush
-   START_1V1.bat             Starter rett i Bridge Duel 1v1
-   START_AIR_HOCKEY.bat      Starter rett i Air Hockey
+   START_HT_GAME_KIOSK.bat     Spillvelger i kiosk/fullskjerm (anbefalt)
+   START_CONTAINER_STACKER.bat Starter rett i Container Stacker
+   START_HARBOR_RUSH.bat       Starter rett i Harbor Rush
+   START_1V1.bat               Starter rett i Bridge Duel 1v1
+   START_AIR_HOCKEY.bat        Starter rett i Air Hockey
+   START_SONAR.bat             Starter rett i Sonar Sequence
 
 Det apnes et svart vindu (Node-server) og nettleseren med spillet.
 I det svarte vinduet vises Game-URL og Settings/Admin-URL.
@@ -27,6 +29,9 @@ ADMIN / INNSTILLINGER
 ---------------------
 Admin-sidene apnes via URL-ene som vises i det svarte vinduet, typisk:
    http://localhost:3000/admin.html          (admin-oversikt)
+   http://localhost:3000/admin-games.html    (vanskelighetsgrad, tid,
+                                              highscore og nullstilling
+                                              per spill)
    http://localhost:3000/status.html         (status / drift)
    http://localhost:3000/admin-rush.html     (Harbor Rush)
    http://localhost:3000/admin-duel.html     (Bridge Duel)

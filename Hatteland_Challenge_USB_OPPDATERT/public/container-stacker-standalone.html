@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Container Stacker | Hatteland Technology</title>
+    <style>
+      :root {
+        --bg: #02070d;
+        --text: #f4fbff;
+        --muted: #8fa8b8;
+        --line: rgba(160, 214, 236, 0.14);
+        --blue: #4fe3ff;
+        --gold: #f5c84b;
+        --red: #ff5d6c;
+        --green: #68f2a6;
+      }
+
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+        touch-action: none;
+        user-select: none;
+      }
+
+      button {
+        border: 0;
+        font: inherit;
+        cursor: pointer;
+        color: inherit;
+      }
+
+      .app {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: clamp(10px, 1.6vmin, 20px) clamp(14px, 2.2vmin, 30px);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .brand img {
+        height: clamp(26px, 3.4vmin, 40px);
+        width: auto;
+        display: block;
+      }
+
+      .brand div {
+        display: grid;
+        gap: 1px;
+      }
+
+      .eyebrow {
+        margin: 0;
+        font-size: clamp(8px, 0.92vmin, 11px);
+        font-weight: 800;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: clamp(14px, 1.8vmin, 22px);
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .hud {
+        display: flex;
+        align-items: center;
+        gap: clamp(10px, 1.8vmin, 28px);
+      }
+
+      .stat {
+        display: grid;
+        gap: 2px;
+        text-align: right;
+        min-width: clamp(48px, 6vmin, 84px);
+      }
+
+      .stat span {
+        font-size: clamp(8px, 0.9vmin, 10px);
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .stat strong {
+        font-size: clamp(16px, 2.3vmin, 30px);
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        line-height: 1;
+      }
+
+      .stat--score strong {
+        color: var(--gold);
+      }
+
+      .stat--combo strong {
+        color: var(--green);
+      }
+
+      .stat.is-hidden {
+        display: none;
+      }
+
+      .kiosk-nav {
+        display: flex;
+        gap: 8px;
+      }
+
+      .nav-button {
+        min-height: 40px;
+        padding: 0 14px;
+        display: inline-grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text);
+        font-size: clamp(9px, 1vmin, 11px);
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+
+      .nav-button--exit {
+        border-color: rgba(255, 93, 108, 0.34);
+        color: #ffdce1;
+      }
+
+      body.game-running .kiosk-nav {
+        display: none;
+      }
+
+      .stage {
+        position: relative;
+        overflow: hidden;
+      }
+
+      canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .drop-hint {
+        position: absolute;
+        left: 50%;
+        bottom: clamp(18px, 3vmin, 40px);
+        transform: translateX(-50%);
+        z-index: 3;
+        padding: 10px 22px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(3, 13, 22, 0.7);
+        font-size: clamp(10px, 1.15vmin, 13px);
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+        opacity: 0;
+        transition: opacity 200ms ease;
+      }
+
+      body.game-running .drop-hint {
+        opacity: 1;
+      }
+
+      .pause-button {
+        position: absolute;
+        right: clamp(12px, 1.8vmin, 22px);
+        bottom: clamp(12px, 1.8vmin, 22px);
+        z-index: 4;
+        min-width: 108px;
+        min-height: 46px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(3, 13, 22, 0.74);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        display: none;
+      }
+
+      body.game-running .pause-button {
+        display: block;
+      }
+
+      .hold-exit {
+        position: absolute;
+        left: clamp(12px, 1.8vmin, 22px);
+        bottom: clamp(12px, 1.8vmin, 22px);
+        z-index: 4;
+        min-width: 150px;
+        min-height: 46px;
+        display: none;
+        place-items: center;
+        padding: 0 18px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 93, 108, 0.34);
+        border-radius: 12px;
+        background: rgba(3, 13, 22, 0.74);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      body.game-running .hold-exit {
+        display: inline-grid;
+      }
+
+      .hold-exit span {
+        position: relative;
+        z-index: 2;
+      }
+
+      .hold-exit-fill {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        z-index: 0;
+        width: 0;
+        background: linear-gradient(90deg, rgba(255, 93, 108, 0.9), rgba(245, 200, 75, 0.86));
+        transition: width 45ms linear;
+      }
+
+      .overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 6;
+        display: grid;
+        place-items: center;
+        padding: clamp(16px, 3vmin, 40px);
+        background: rgba(2, 7, 13, 0.82);
+        backdrop-filter: blur(8px);
+      }
+
+      .overlay.hidden {
+        display: none;
+      }
+
+      .panel {
+        width: min(760px, 100%);
+        max-height: 100%;
+        overflow: auto;
+        display: grid;
+        gap: clamp(12px, 1.8vmin, 22px);
+        padding: clamp(20px, 3.4vmin, 46px);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: linear-gradient(165deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015));
+        text-align: center;
+      }
+
+      .panel h2 {
+        margin: 0;
+        font-size: clamp(24px, 3.6vmin, 44px);
+        font-weight: 800;
+        letter-spacing: -0.025em;
+        line-height: 1.05;
+      }
+
+      .panel p {
+        margin: 0;
+        font-size: clamp(12px, 1.4vmin, 16px);
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 10px;
+        text-align: left;
+      }
+
+      .step {
+        display: grid;
+        gap: 4px;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+      }
+
+      .step b {
+        font-size: clamp(11px, 1.2vmin, 14px);
+      }
+
+      .step small {
+        font-size: clamp(10px, 1.1vmin, 12px);
+        color: var(--muted);
+        line-height: 1.4;
+      }
+
+      .primary {
+        min-height: 62px;
+        padding: 0 40px;
+        border-radius: 14px;
+        background: linear-gradient(120deg, var(--gold), #ffb547);
+        color: #14202b;
+        font-size: clamp(13px, 1.6vmin, 18px);
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        justify-self: center;
+      }
+
+      .primary:active {
+        transform: translateY(2px);
+      }
+
+      .secondary {
+        min-height: 50px;
+        padding: 0 26px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: transparent;
+        color: var(--text);
+        font-size: clamp(10px, 1.15vmin, 13px);
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        text-decoration: none;
+        display: inline-grid;
+        place-items: center;
+      }
+
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+      }
+
+      .result-figures {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+        gap: 10px;
+      }
+
+      .figure {
+        display: grid;
+        gap: 4px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+      }
+
+      .figure span {
+        font-size: clamp(8px, 0.92vmin, 10px);
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .figure strong {
+        font-size: clamp(19px, 2.6vmin, 30px);
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .board {
+        display: grid;
+        gap: 6px;
+        text-align: left;
+      }
+
+      .board > span {
+        font-size: clamp(8px, 0.92vmin, 10px);
+        font-weight: 800;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .board ol {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 4px;
+      }
+
+      .board li {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        font-size: clamp(11px, 1.2vmin, 14px);
+      }
+
+      .board li b {
+        font-variant-numeric: tabular-nums;
+        color: var(--gold);
+      }
+
+      .form {
+        display: grid;
+        gap: 10px;
+        text-align: left;
+      }
+
+      .form.hidden {
+        display: none;
+      }
+
+      .form input[type="text"],
+      .form input[type="email"],
+      .form input[type="tel"] {
+        min-height: 54px;
+        padding: 0 16px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text);
+        font: inherit;
+        font-size: clamp(13px, 1.4vmin, 16px);
+      }
+
+      .form input::placeholder {
+        color: rgba(143, 168, 184, 0.7);
+      }
+
+      .consent {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        font-size: clamp(10px, 1.08vmin, 12px);
+        line-height: 1.45;
+        color: var(--muted);
+      }
+
+      .consent input {
+        width: 24px;
+        height: 24px;
+        flex: 0 0 auto;
+        margin-top: 1px;
+      }
+
+      .message {
+        margin: 0;
+        min-height: 18px;
+        font-size: clamp(10px, 1.1vmin, 13px);
+        font-weight: 700;
+        color: var(--gold);
+      }
+
+      .pause-panel {
+        width: min(420px, 100%);
+        display: grid;
+        gap: 16px;
+        justify-items: center;
+        padding: clamp(24px, 3.4vmin, 40px);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(3, 13, 22, 0.92);
+        text-align: center;
+      }
+
+      @media (max-width: 760px) {
+        .stat--combo,
+        .stat--height {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div class="brand">
+          <img src="/assets/image.png" alt="" />
+          <div>
+            <p class="eyebrow" id="companyName">Hatteland Technology</p>
+            <h1>Container Stacker</h1>
+          </div>
+        </div>
+
+        <div class="hud">
+          <div class="stat stat--score">
+            <span>Score</span>
+            <strong id="scoreValue">0</strong>
+          </div>
+          <div class="stat stat--height">
+            <span>Height</span>
+            <strong id="heightValue">0</strong>
+          </div>
+          <div class="stat stat--combo">
+            <span>Perfect</span>
+            <strong id="comboValue">x0</strong>
+          </div>
+          <div class="stat stat--time is-hidden" id="timeStat">
+            <span>Time</span>
+            <strong id="timeValue">0</strong>
+          </div>
+          <nav class="kiosk-nav" aria-label="Kiosk navigation">
+            <a class="nav-button" href="/select.html">Main kiosk</a>
+            <button id="exitGameButton" class="nav-button nav-button--exit" type="button">Exit game</button>
+          </nav>
+        </div>
+      </header>
+
+      <section class="stage">
+        <canvas id="gameCanvas"></canvas>
+        <p class="drop-hint">Tap anywhere to drop</p>
+
+        <button id="holdExitButton" class="hold-exit" type="button">
+          <span>Hold to exit</span>
+          <span id="holdExitFill" class="hold-exit-fill"></span>
+        </button>
+        <button id="pauseButton" class="pause-button" type="button">Pause</button>
+
+        <div id="pauseOverlay" class="overlay hidden">
+          <div class="pause-panel">
+            <p class="eyebrow">Paused</p>
+            <h2>Container Stacker</h2>
+            <button id="resumeButton" class="primary" type="button">Resume</button>
+          </div>
+        </div>
+
+        <div id="startOverlay" class="overlay">
+          <div class="panel">
+            <p class="eyebrow">Precision challenge</p>
+            <h2>Stack the highest tower.</h2>
+            <p>
+              The crane swings a container over the ship. Tap to release it. Whatever hangs over the
+              edge breaks off, and the next container is only as wide as what you landed.
+            </p>
+            <div class="steps">
+              <article class="step">
+                <b>Tap to drop</b>
+                <small>Anywhere on the screen. Timing is everything.</small>
+              </article>
+              <article class="step">
+                <b>Land it clean</b>
+                <small>A perfect hit keeps the full width and pays a combo bonus.</small>
+              </article>
+              <article class="step">
+                <b>Watch the wind</b>
+                <small>The higher you build, the more the crane sways.</small>
+              </article>
+            </div>
+            <button id="startButton" class="primary" type="button">Start stacking</button>
+            <div class="board">
+              <span>Container Stacker top scores</span>
+              <ol id="startBoard">
+                <li><span>No scores yet</span><b>0</b></li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <div id="endOverlay" class="overlay hidden">
+          <div class="panel">
+            <p class="eyebrow" id="endKicker">Tower collapsed</p>
+            <h2 id="endTitle">Nice stack.</h2>
+            <div class="result-figures">
+              <article class="figure">
+                <span>Score</span>
+                <strong id="finalScore">0</strong>
+              </article>
+              <article class="figure">
+                <span>Containers</span>
+                <strong id="finalHeight">0</strong>
+              </article>
+              <article class="figure">
+                <span>Best combo</span>
+                <strong id="finalCombo">0</strong>
+              </article>
+              <article class="figure">
+                <span>Record</span>
+                <strong id="finalRecord">0</strong>
+              </article>
+            </div>
+
+            <form id="registrationForm" class="form" novalidate>
+              <input id="nameInput" type="text" maxlength="40" placeholder="Name *" autocomplete="name" />
+              <input id="emailInput" type="email" maxlength="80" placeholder="Email" autocomplete="email" />
+              <input id="phoneInput" type="tel" maxlength="30" placeholder="Phone" autocomplete="tel" />
+              <label class="consent">
+                <input id="consentInput" type="checkbox" />
+                <span id="consentLabel">
+                  I consent to Hatteland Technology storing my contact details only for this game and prize contact.
+                </span>
+              </label>
+              <button id="saveScoreButton" class="primary" type="submit">Save score</button>
+            </form>
+            <p id="formMessage" class="message" aria-live="polite"></p>
+
+            <div class="board">
+              <span>Container Stacker top scores</span>
+              <ol id="endBoard">
+                <li><span>No scores yet</span><b>0</b></li>
+              </ol>
+            </div>
+
+            <div class="row">
+              <button id="playAgainButton" class="secondary" type="button">Play again</button>
+              <a class="secondary" href="/select.html">Main kiosk</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        var GAME_ID = "stacker";
+        var canvas = document.getElementById("gameCanvas");
+        var ctx = canvas.getContext("2d");
+        var isFileMode = window.location.protocol === "file:";
+
+        var ui = {
+          score: document.getElementById("scoreValue"),
+          height: document.getElementById("heightValue"),
+          combo: document.getElementById("comboValue"),
+          timeStat: document.getElementById("timeStat"),
+          time: document.getElementById("timeValue"),
+          startOverlay: document.getElementById("startOverlay"),
+          endOverlay: document.getElementById("endOverlay"),
+          pauseOverlay: document.getElementById("pauseOverlay"),
+          startButton: document.getElementById("startButton"),
+          playAgainButton: document.getElementById("playAgainButton"),
+          pauseButton: document.getElementById("pauseButton"),
+          resumeButton: document.getElementById("resumeButton"),
+          exitGameButton: document.getElementById("exitGameButton"),
+          holdExitButton: document.getElementById("holdExitButton"),
+          holdExitFill: document.getElementById("holdExitFill"),
+          endKicker: document.getElementById("endKicker"),
+          endTitle: document.getElementById("endTitle"),
+          finalScore: document.getElementById("finalScore"),
+          finalHeight: document.getElementById("finalHeight"),
+          finalCombo: document.getElementById("finalCombo"),
+          finalRecord: document.getElementById("finalRecord"),
+          startBoard: document.getElementById("startBoard"),
+          endBoard: document.getElementById("endBoard"),
+          form: document.getElementById("registrationForm"),
+          name: document.getElementById("nameInput"),
+          email: document.getElementById("emailInput"),
+          phone: document.getElementById("phoneInput"),
+          consent: document.getElementById("consentInput"),
+          consentLabel: document.getElementById("consentLabel"),
+          saveButton: document.getElementById("saveScoreButton"),
+          message: document.getElementById("formMessage"),
+          companyName: document.getElementById("companyName")
+        };
+
+        var DEFAULTS = {
+          difficultyName: "Normal",
+          startSpeedPercent: 100,
+          speedRampPercent: 100,
+          startWidthPercent: 100,
+          perfectTolerancePercent: 5,
+          perfectRegainPercent: 35,
+          swayStartLevel: 8,
+          swayStrengthPercent: 100,
+          basePoints: 10,
+          perfectBonusPoints: 25,
+          maxComboBonus: 120,
+          timeLimitSeconds: 90,
+          enableSway: true,
+          enableTimeLimit: false
+        };
+
+        var settings = Object.assign({}, DEFAULTS);
+        var pendingSettings = null;
+
+        // Spillet regnes i en fast verden (1000 bredt) og skaleres til lerretet,
+        // slik at vanskelighetsgraden blir lik paa alle skjermstorrelser.
+        var WORLD_W = 1000;
+        var BLOCK_H = 46;
+        var BASE_SPEED = 190;
+        var VISIBLE_ROWS = 9;
+
+        var COLORS = ["#4fe3ff", "#f5c84b", "#68f2a6", "#ff8f5d", "#9d8bff", "#ff5d6c"];
+
+        var state = null;
+        var view = { scale: 1, offsetX: 0, w: 0, h: 0 };
+        var animationId = 0;
+        var lastTime = 0;
+        var pauseStartedAt = 0;
+        var holdExitTimer = null;
+        var holdExitProgressTimer = null;
+        var HOLD_EXIT_MS = 1200;
+        var idleTimer = null;
+        var IDLE_RESET_MS = 90000;
+
+        function percent(value) {
+          return Number(value || 0) / 100;
+        }
+
+        function createState() {
+          var startWidth = Math.max(120, Math.round(360 * percent(settings.startWidthPercent)));
+          return {
+            running: false,
+            paused: false,
+            over: false,
+            score: 0,
+            placed: 0,
+            combo: 0,
+            bestCombo: 0,
+            timeLeft: Number(settings.timeLimitSeconds || 90),
+            stack: [{ x: (WORLD_W - startWidth) / 2, width: startWidth, color: COLORS[0], row: 0 }],
+            current: null,
+            debris: [],
+            pops: [],
+            cameraY: 0,
+            cameraTarget: 0,
+            shake: 0,
+            flash: 0,
+            wavePhase: 0
+          };
+        }
+
+        function currentSpeed() {
+          var base = BASE_SPEED * percent(settings.startSpeedPercent);
+          var ramp = 1 + state.placed * 0.035 * percent(settings.speedRampPercent);
+          return Math.min(base * ramp, BASE_SPEED * 3.4);
+        }
+
+        function swayAmplitude() {
+          if (!settings.enableSway) return 0;
+          var startLevel = Number(settings.swayStartLevel || 0);
+          if (state.placed < startLevel) return 0;
+          var over = state.placed - startLevel;
+          return Math.min(52, over * 2.4) * percent(settings.swayStrengthPercent);
+        }
+
+        function spawnContainer() {
+          var top = state.stack[state.stack.length - 1];
+          var fromLeft = state.stack.length % 2 === 0;
+          // Start ved kanten av det gyldige omraadet, ellers vises containeren
+          // utenfor skjermen i den forste framen.
+          var travel = fromLeft ? 0 : Math.max(0, WORLD_W - top.width);
+
+          state.current = {
+            x: travel,
+            width: top.width,
+            color: COLORS[state.stack.length % COLORS.length],
+            direction: fromLeft ? 1 : -1,
+            travel: travel,
+            swayPhase: 0,
+            row: state.stack.length
+          };
+        }
+
+        function resizeCanvas() {
+          var rect = canvas.getBoundingClientRect();
+          var ratio = Math.min(window.devicePixelRatio || 1, 2);
+          view.w = Math.max(1, Math.round(rect.width));
+          view.h = Math.max(1, Math.round(rect.height));
+          canvas.width = Math.round(view.w * ratio);
+          canvas.height = Math.round(view.h * ratio);
+          ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+          // Skaler verden slik at et fast antall rader alltid er synlige.
+          var scaleX = view.w / WORLD_W;
+          var scaleY = view.h / (BLOCK_H * VISIBLE_ROWS + 150);
+          view.scale = Math.min(scaleX, scaleY);
+          view.offsetX = (view.w - WORLD_W * view.scale) / 2;
+          render();
+        }
+
+        function toScreenX(worldX) {
+          return view.offsetX + worldX * view.scale;
+        }
+
+        function rowScreenY(row) {
+          // Rad 0 ligger nederst; kameraet loefter stabelen etter hvert.
+          var baseline = view.h - 92;
+          return baseline - (row + 1) * BLOCK_H * view.scale + state.cameraY * view.scale;
+        }
+
+        function updateHud() {
+          ui.score.textContent = String(state.score);
+          ui.height.textContent = String(state.placed);
+          ui.combo.textContent = "x" + state.combo;
+          if (settings.enableTimeLimit) {
+            ui.timeStat.classList.remove("is-hidden");
+            ui.time.textContent = String(Math.max(0, Math.ceil(state.timeLeft)));
+          } else {
+            ui.timeStat.classList.add("is-hidden");
+          }
+        }
+
+        function addPop(text, worldX, row, good) {
+          state.pops.push({ text: text, x: worldX, row: row, life: 1, good: good !== false });
+        }
+
+        function dropContainer() {
+          if (!state.running || state.paused || !state.current) return;
+
+          var moving = state.current;
+          var top = state.stack[state.stack.length - 1];
+          var left = Math.max(moving.x, top.x);
+          var right = Math.min(moving.x + moving.width, top.x + top.width);
+          var overlap = right - left;
+
+          if (overlap <= 0) {
+            // Bommet helt - containeren faller i sjoen og runden er over.
+            state.debris.push({
+              x: moving.x,
+              width: moving.width,
+              row: moving.row,
+              color: moving.color,
+              vy: 0,
+              vx: moving.direction * 40,
+              spin: moving.direction * 1.6,
+              angle: 0
+            });
+            state.current = null;
+            state.shake = 1;
+            endGame(false);
+            return;
+          }
+
+          var offset = Math.abs(moving.x - top.x);
+          var tolerance = Math.max(4, top.width * percent(settings.perfectTolerancePercent));
+          var perfect = offset <= tolerance;
+          var placedX = left;
+          var placedWidth = overlap;
+
+          if (perfect) {
+            // Perfekt treff: behold bredden og gi litt tilbake av det som er tapt.
+            placedX = top.x;
+            placedWidth = top.width;
+            var regain = Math.round(
+              (moving.width - overlap) * percent(settings.perfectRegainPercent)
+            );
+            placedWidth = Math.min(WORLD_W, top.width + Math.max(0, regain));
+            placedX = Math.max(0, Math.min(WORLD_W - placedWidth, top.x - regain / 2));
+            state.combo += 1;
+            state.bestCombo = Math.max(state.bestCombo, state.combo);
+            state.flash = 0.8;
+          } else {
+            state.combo = 0;
+            // Overhenget knekker av og faller ned langs skroget.
+            var overhangLeft = moving.x < left;
+            state.debris.push({
+              x: overhangLeft ? moving.x : right,
+              width: overhangLeft ? left - moving.x : moving.x + moving.width - right,
+              row: moving.row,
+              color: moving.color,
+              vy: 0,
+              vx: overhangLeft ? -70 : 70,
+              spin: overhangLeft ? -2.2 : 2.2,
+              angle: 0
+            });
+          }
+
+          var basePoints = Number(settings.basePoints || 10);
+          var gained = basePoints;
+
+          if (perfect) {
+            var comboBonus = Math.min(
+              Number(settings.maxComboBonus || 120),
+              Number(settings.perfectBonusPoints || 25) * state.combo
+            );
+            gained += comboBonus;
+            addPop("PERFECT +" + gained, placedX + placedWidth / 2, moving.row, true);
+          } else {
+            addPop("+" + gained, placedX + placedWidth / 2, moving.row, true);
+          }
+
+          state.score += gained;
+          state.placed += 1;
+          state.stack.push({
+            x: placedX,
+            width: placedWidth,
+            color: moving.color,
+            row: moving.row,
+            perfect: perfect
+          });
+
+          // Loft kameraet naar taarnet naermer seg toppen av utsnittet.
+          if (state.stack.length > VISIBLE_ROWS - 3) {
+            state.cameraTarget = (state.stack.length - (VISIBLE_ROWS - 3)) * BLOCK_H;
+          }
+
+          state.shake = Math.min(1, state.shake + (perfect ? 0.18 : 0.32));
+          updateHud();
+          spawnContainer();
+        }
+
+        function update(dt) {
+          state.wavePhase += dt;
+          state.shake = Math.max(0, state.shake - dt * 3.2);
+          state.flash = Math.max(0, state.flash - dt * 2.4);
+          state.cameraY += (state.cameraTarget - state.cameraY) * Math.min(1, dt * 6);
+
+          if (settings.enableTimeLimit) {
+            state.timeLeft -= dt;
+            if (state.timeLeft <= 0) {
+              state.timeLeft = 0;
+              endGame(true);
+              return;
+            }
+          }
+
+          if (state.current) {
+            var moving = state.current;
+            var speed = currentSpeed();
+            moving.travel += moving.direction * speed * dt;
+
+            if (moving.travel <= 0) {
+              moving.travel = 0;
+              moving.direction = 1;
+            }
+            if (moving.travel >= WORLD_W - moving.width) {
+              moving.travel = WORLD_W - moving.width;
+              moving.direction = -1;
+            }
+
+            // Kranen vaier: containeren henger etter i kabelen.
+            moving.swayPhase += dt * 2.2;
+            var sway = Math.sin(moving.swayPhase) * swayAmplitude();
+            moving.x = Math.max(0, Math.min(WORLD_W - moving.width, moving.travel + sway));
+          }
+
+          state.debris = state.debris.filter(function (piece) {
+            piece.vy += 900 * dt;
+            piece.row -= (piece.vy * dt) / BLOCK_H;
+            piece.x += piece.vx * dt;
+            piece.angle += piece.spin * dt;
+            return piece.row > -4;
+          });
+
+          state.pops = state.pops.filter(function (pop) {
+            pop.life -= dt * 1.3;
+            pop.row += dt * 0.9;
+            return pop.life > 0;
+          });
+
+          if (settings.enableTimeLimit) updateHud();
+        }
+
+        function roundRect(x, y, w, h, r) {
+          var radius = Math.min(r, w / 2, h / 2);
+          ctx.beginPath();
+          ctx.moveTo(x + radius, y);
+          ctx.lineTo(x + w - radius, y);
+          ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+          ctx.lineTo(x + w, y + h - radius);
+          ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+          ctx.lineTo(x + radius, y + h);
+          ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+          ctx.lineTo(x, y + radius);
+          ctx.quadraticCurveTo(x, y, x + radius, y);
+          ctx.closePath();
+        }
+
+        function drawContainer(worldX, worldWidth, screenY, color, perfect) {
+          var x = toScreenX(worldX);
+          var w = worldWidth * view.scale;
+          var h = BLOCK_H * view.scale;
+
+          ctx.save();
+          ctx.shadowColor = "rgba(0,0,0,0.42)";
+          ctx.shadowBlur = 16 * view.scale;
+          ctx.shadowOffsetY = 5 * view.scale;
+          ctx.fillStyle = color;
+          roundRect(x, screenY, w, h - 3 * view.scale, 5 * view.scale);
+          ctx.fill();
+          ctx.restore();
+
+          // Riller paa containeren - bare naar det er plass til at de leses.
+          if (w > 34) {
+            ctx.save();
+            ctx.globalAlpha = 0.16;
+            ctx.strokeStyle = "#02070d";
+            ctx.lineWidth = Math.max(1, 1.6 * view.scale);
+            var step = Math.max(10, w / 9);
+            for (var gx = x + step; gx < x + w - 3; gx += step) {
+              ctx.beginPath();
+              ctx.moveTo(gx, screenY + 5 * view.scale);
+              ctx.lineTo(gx, screenY + h - 8 * view.scale);
+              ctx.stroke();
+            }
+            ctx.restore();
+          }
+
+          ctx.save();
+          ctx.globalAlpha = 0.32;
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(x + 2, screenY + 2, w - 4, Math.max(1, 2 * view.scale));
+          ctx.restore();
+
+          if (perfect) {
+            ctx.save();
+            ctx.strokeStyle = "rgba(255,255,255,0.75)";
+            ctx.lineWidth = Math.max(1, 1.4 * view.scale);
+            roundRect(x, screenY, w, h - 3 * view.scale, 5 * view.scale);
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+
+        function drawSeaAndShip() {
+          var waterTop = view.h - 74;
+
+          ctx.save();
+          var gradient = ctx.createLinearGradient(0, waterTop - 40, 0, view.h);
+          gradient.addColorStop(0, "rgba(9, 46, 71, 0.9)");
+          gradient.addColorStop(1, "rgba(3, 16, 27, 1)");
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, waterTop - 40, view.w, view.h - waterTop + 40);
+
+          ctx.strokeStyle = "rgba(79, 227, 255, 0.24)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          for (var x = 0; x <= view.w; x += 8) {
+            var y = waterTop + Math.sin(x * 0.014 + state.wavePhase * 1.6) * 4;
+            if (x === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+          ctx.restore();
+
+          // Skroget som stabelen staar paa.
+          var hullTop = view.h - 92 + state.cameraY * view.scale;
+          if (hullTop < view.h + 40) {
+            var hullX = toScreenX(-40);
+            var hullW = (WORLD_W + 80) * view.scale;
+            ctx.save();
+            ctx.fillStyle = "#123449";
+            roundRect(hullX, hullTop, hullW, 46 * view.scale, 8 * view.scale);
+            ctx.fill();
+            ctx.fillStyle = "rgba(245, 200, 75, 0.85)";
+            ctx.fillRect(hullX, hullTop, hullW, Math.max(2, 3 * view.scale));
+            ctx.restore();
+          }
+        }
+
+        function drawCrane() {
+          if (!state.current) return;
+          var moving = state.current;
+          var centerX = toScreenX(moving.x + moving.width / 2);
+          var blockY = rowScreenY(moving.row);
+          var railY = Math.max(18, blockY - 78 * view.scale);
+
+          ctx.save();
+          ctx.strokeStyle = "rgba(160, 214, 236, 0.28)";
+          ctx.lineWidth = Math.max(2, 3 * view.scale);
+          ctx.beginPath();
+          ctx.moveTo(0, railY);
+          ctx.lineTo(view.w, railY);
+          ctx.stroke();
+
+          // Trallen sitter over sving-punktet, ikke over containeren.
+          var trolleyX = toScreenX(moving.travel + moving.width / 2);
+          ctx.fillStyle = "#f5c84b";
+          roundRect(trolleyX - 22 * view.scale, railY - 9 * view.scale, 44 * view.scale, 16 * view.scale, 4);
+          ctx.fill();
+
+          ctx.strokeStyle = "rgba(244, 251, 255, 0.55)";
+          ctx.lineWidth = Math.max(1, 1.8 * view.scale);
+          ctx.beginPath();
+          ctx.moveTo(trolleyX, railY + 7 * view.scale);
+          ctx.lineTo(centerX, blockY);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        function render() {
+          if (!state) return;
+          ctx.clearRect(0, 0, view.w, view.h);
+
+          ctx.save();
+          if (state.shake > 0.01) {
+            var amount = state.shake * 7;
+            ctx.translate((Math.random() - 0.5) * amount, (Math.random() - 0.5) * amount);
+          }
+
+          drawSeaAndShip();
+
+          for (var i = 0; i < state.stack.length; i += 1) {
+            var block = state.stack[i];
+            var y = rowScreenY(block.row);
+            if (y > view.h + 60 || y < -80) continue;
+            drawContainer(block.x, block.width, y, block.color, block.perfect);
+          }
+
+          state.debris.forEach(function (piece) {
+            var y = rowScreenY(piece.row);
+            ctx.save();
+            var cx = toScreenX(piece.x + piece.width / 2);
+            ctx.translate(cx, y + (BLOCK_H * view.scale) / 2);
+            ctx.rotate(piece.angle);
+            ctx.globalAlpha = 0.9;
+            ctx.fillStyle = piece.color;
+            var w = piece.width * view.scale;
+            var h = BLOCK_H * view.scale - 3;
+            roundRect(-w / 2, -h / 2, w, h, 4 * view.scale);
+            ctx.fill();
+            ctx.restore();
+          });
+
+          if (state.current) {
+            drawContainer(
+              state.current.x,
+              state.current.width,
+              rowScreenY(state.current.row),
+              state.current.color
+            );
+            drawCrane();
+          }
+
+          ctx.save();
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          state.pops.forEach(function (pop) {
+            ctx.globalAlpha = Math.max(0, Math.min(1, pop.life));
+            ctx.fillStyle = pop.good ? "#68f2a6" : "#ff5d6c";
+            ctx.font = "900 " + Math.round(20 * view.scale) + "px Segoe UI, Arial";
+            ctx.fillText(pop.text, toScreenX(pop.x), rowScreenY(pop.row) - 14 * view.scale);
+          });
+          ctx.restore();
+
+          ctx.restore();
+
+          if (state.flash > 0.01) {
+            ctx.save();
+            ctx.globalAlpha = state.flash * 0.16;
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, view.w, view.h);
+            ctx.restore();
+          }
+        }
+
+        function loop(now) {
+          var dt = Math.min(0.05, (now - lastTime) / 1000 || 0);
+          lastTime = now;
+          if (!state.paused) {
+            update(dt);
+            render();
+          }
+          if (state.running && !state.paused) {
+            animationId = requestAnimationFrame(loop);
+          }
+        }
+
+        function startGame() {
+          cancelAnimationFrame(animationId);
+          clearHoldExit();
+          if (pendingSettings) {
+            settings = pendingSettings;
+            pendingSettings = null;
+          }
+          state = createState();
+          state.running = true;
+          document.body.classList.add("game-running");
+          ui.startOverlay.classList.add("hidden");
+          ui.endOverlay.classList.add("hidden");
+          ui.pauseOverlay.classList.add("hidden");
+          ui.message.textContent = "";
+          ui.form.classList.add("hidden");
+          resizeCanvas();
+          spawnContainer();
+          updateHud();
+          lastTime = performance.now();
+          animationId = requestAnimationFrame(loop);
+        }
+
+        function endGame(timeUp) {
+          if (state.over) return;
+          state.over = true;
+          state.running = false;
+          state.paused = false;
+          document.body.classList.remove("game-running");
+          cancelAnimationFrame(animationId);
+          clearHoldExit();
+          ui.pauseOverlay.classList.add("hidden");
+
+          var record = getRecord();
+          var isRecord = state.score > record;
+          rememberRecord(state.score);
+
+          ui.endKicker.textContent = timeUp ? "Time is up" : "Tower collapsed";
+          ui.endTitle.textContent = isRecord
+            ? "New kiosk record."
+            : state.placed >= 12
+              ? "Strong stack."
+              : "Nice stack.";
+          ui.finalScore.textContent = String(state.score);
+          ui.finalHeight.textContent = String(state.placed);
+          ui.finalCombo.textContent = String(state.bestCombo);
+          ui.finalRecord.textContent = String(Math.max(record, state.score));
+
+          ui.form.classList.remove("hidden");
+          ui.saveButton.disabled = false;
+          ui.saveButton.textContent = "Save score";
+          ui.name.value = "";
+          ui.email.value = "";
+          ui.phone.value = "";
+          ui.consent.checked = false;
+          ui.endOverlay.classList.remove("hidden");
+
+          // Kort animasjon av at containerne faller videre.
+          render();
+          refreshBoard();
+        }
+
+        function exitToStart() {
+          cancelAnimationFrame(animationId);
+          clearHoldExit();
+          document.body.classList.remove("game-running");
+          state = createState();
+          ui.pauseOverlay.classList.add("hidden");
+          ui.endOverlay.classList.add("hidden");
+          ui.startOverlay.classList.remove("hidden");
+          updateHud();
+          render();
+        }
+
+        function pauseGame() {
+          if (!state.running || state.paused) return;
+          state.paused = true;
+          pauseStartedAt = performance.now();
+          clearHoldExit();
+          ui.pauseOverlay.classList.remove("hidden");
+          document.body.classList.remove("game-running");
+        }
+
+        function resumeGame() {
+          if (!state.paused) return;
+          state.paused = false;
+          pauseStartedAt = 0;
+          ui.pauseOverlay.classList.add("hidden");
+          document.body.classList.add("game-running");
+          lastTime = performance.now();
+          animationId = requestAnimationFrame(loop);
+        }
+
+        function clearHoldExit() {
+          clearTimeout(holdExitTimer);
+          clearInterval(holdExitProgressTimer);
+          holdExitTimer = null;
+          holdExitProgressTimer = null;
+          ui.holdExitFill.style.width = "0%";
+        }
+
+        function getRecord() {
+          return Number(localStorage.getItem("stackerRecordScore") || 0);
+        }
+
+        function rememberRecord(score) {
+          if (score > getRecord()) {
+            localStorage.setItem("stackerRecordScore", String(score));
+          }
+        }
+
+        function renderBoard(list, entries) {
+          list.innerHTML = "";
+
+          if (!entries || !entries.length) {
+            var empty = document.createElement("li");
+            empty.innerHTML = "<span>Be the first on the board</span><b>0</b>";
+            list.appendChild(empty);
+            return;
+          }
+
+          entries.slice(0, 5).forEach(function (entry, index) {
+            var item = document.createElement("li");
+            var name = document.createElement("span");
+            var score = document.createElement("b");
+            name.textContent = index + 1 + ". " + entry.name;
+            score.textContent = String(entry.score);
+            item.append(name, score);
+            list.appendChild(item);
+          });
+        }
+
+        function refreshBoard() {
+          if (isFileMode || !window.fetch) return;
+          fetch("/api/leaderboard?game=" + GAME_ID, { cache: "no-store" })
+            .then(function (response) {
+              return response.ok ? response.json() : null;
+            })
+            .then(function (payload) {
+              if (!payload) return;
+              renderBoard(ui.startBoard, payload.entries);
+              renderBoard(ui.endBoard, payload.entries);
+            })
+            .catch(function () {
+              /* offline - lokale rekorder vises fortsatt */
+            });
+        }
+
+        function validateRegistration() {
+          var name = ui.name.value.trim();
+          var email = ui.email.value.trim();
+          var phone = ui.phone.value.trim();
+
+          if (name.length < 2) return "Name is required.";
+          if (!email && !phone) return "Email or phone is required.";
+          if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Email address is invalid.";
+          if (phone && (phone.length < 5 || phone.length > 30)) {
+            return "Phone must be between 5 and 30 characters.";
+          }
+          if (!ui.consent.checked) return "Consent is required to save your score.";
+          return "";
+        }
+
+        function saveScore() {
+          if (ui.saveButton.disabled) return;
+
+          var error = validateRegistration();
+          if (error) {
+            ui.message.textContent = error;
+            return;
+          }
+
+          ui.message.textContent = "";
+          ui.saveButton.disabled = true;
+          ui.saveButton.textContent = "Saving...";
+
+          fetch("/api/standalone-entry", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              game: GAME_ID,
+              name: ui.name.value.trim().slice(0, 40),
+              email: ui.email.value.trim(),
+              phone: ui.phone.value.trim(),
+              consent: true,
+              score: state.score,
+              playedAt: new Date().toISOString()
+            })
+          })
+            .then(function (response) {
+              return response.json().then(function (payload) {
+                return { ok: response.ok, payload: payload };
+              });
+            })
+            .then(function (result) {
+              if (!result.ok) {
+                ui.message.textContent = result.payload.error || "Could not save score.";
+                ui.saveButton.disabled = false;
+                ui.saveButton.textContent = "Save score";
+                return;
+              }
+              renderBoard(ui.endBoard, result.payload.leaderboard);
+              renderBoard(ui.startBoard, result.payload.leaderboard);
+              ui.message.textContent = "Saved to the Container Stacker board.";
+              ui.saveButton.textContent = "Saved";
+            })
+            .catch(function () {
+              ui.message.textContent = "No server connection. The score stayed on this machine.";
+              ui.saveButton.textContent = "Saved locally";
+            });
+        }
+
+        function applySettings(next) {
+          settings = Object.assign({}, DEFAULTS, next || {});
+        }
+
+        function loadSettings() {
+          if (isFileMode || !window.fetch) return;
+          fetch("/api/config", { cache: "no-store" })
+            .then(function (response) {
+              return response.ok ? response.json() : null;
+            })
+            .then(function (payload) {
+              if (!payload) return;
+              if (payload.brand && payload.brand.companyName) {
+                ui.companyName.textContent = payload.brand.companyName;
+              }
+              if (payload.privacy && payload.privacy.consentLabel) {
+                ui.consentLabel.textContent = payload.privacy.consentLabel;
+              }
+              var next = Object.assign({}, DEFAULTS, payload.stackerGame || {});
+              if (state && state.running) {
+                // Ikke bytt regler midt i en runde - vent til neste start.
+                pendingSettings = next;
+                return;
+              }
+              applySettings(payload.stackerGame);
+              state = createState();
+              updateHud();
+              render();
+            })
+            .catch(function () {
+              /* standardverdier brukes */
+            });
+        }
+
+        function bindTap(element, handler) {
+          element.addEventListener("pointerup", function (event) {
+            event.preventDefault();
+            handler(event);
+          });
+        }
+
+        bindTap(ui.startButton, startGame);
+        bindTap(ui.playAgainButton, startGame);
+        bindTap(ui.pauseButton, pauseGame);
+        bindTap(ui.resumeButton, resumeGame);
+        bindTap(ui.exitGameButton, exitToStart);
+
+        ui.form.addEventListener("submit", function (event) {
+          event.preventDefault();
+          saveScore();
+        });
+
+        // Slipp containeren ved trykk hvor som helst paa spillflaten.
+        canvas.addEventListener("pointerdown", function (event) {
+          event.preventDefault();
+          dropContainer();
+        });
+
+        ui.holdExitButton.addEventListener("pointerdown", function (event) {
+          if (!state.running || state.paused || holdExitTimer) return;
+          var pointerId = event.pointerId;
+          var startedAt = performance.now();
+          if (ui.holdExitButton.setPointerCapture) ui.holdExitButton.setPointerCapture(pointerId);
+          holdExitProgressTimer = setInterval(function () {
+            var progress = Math.min(1, (performance.now() - startedAt) / HOLD_EXIT_MS);
+            ui.holdExitFill.style.width = Math.round(progress * 100) + "%";
+          }, 16);
+          holdExitTimer = setTimeout(function () {
+            if (ui.holdExitButton.releasePointerCapture) {
+              ui.holdExitButton.releasePointerCapture(pointerId);
+            }
+            exitToStart();
+          }, HOLD_EXIT_MS);
+        });
+
+        ["pointerup", "pointerleave", "pointercancel", "lostpointercapture"].forEach(function (name) {
+          ui.holdExitButton.addEventListener(name, function (event) {
+            if (ui.holdExitButton.releasePointerCapture) {
+              ui.holdExitButton.releasePointerCapture(event.pointerId);
+            }
+            clearHoldExit();
+          });
+        });
+
+        window.addEventListener("resize", resizeCanvas);
+
+        // Kiosk: ingen kontekstmeny eller lenke-dragging ved lange trykk.
+        document.addEventListener("contextmenu", function (event) {
+          event.preventDefault();
+        });
+        document.addEventListener("dragstart", function (event) {
+          event.preventDefault();
+        });
+
+        // Attract-modus: en glemt resultatskjerm gaar tilbake til start selv.
+        function armIdleReset() {
+          clearTimeout(idleTimer);
+          idleTimer = setTimeout(function () {
+            if (state && !state.running && ui.startOverlay.classList.contains("hidden")) {
+              exitToStart();
+            }
+            armIdleReset();
+          }, IDLE_RESET_MS);
+        }
+
+        ["pointerdown", "pointermove", "keydown"].forEach(function (name) {
+          window.addEventListener(name, armIdleReset, { passive: true });
+        });
+
+        state = createState();
+        resizeCanvas();
+        updateHud();
+        render();
+        loadSettings();
+        refreshBoard();
+        armIdleReset();
+      })();
+    </script>
+  </body>
+</html>
