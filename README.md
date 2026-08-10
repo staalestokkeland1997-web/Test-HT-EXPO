@@ -162,9 +162,12 @@ Viktige seksjoner i `contest-config.json`:
   HT ECDIS som standardnokkel for live AIS (ekte skip i kartet) - appen
   kobler til automatisk ved oppstart. En nokkel lagt inn manuelt i appens
   "Live sources"-panel har forrang. `apiKeys.arcgis` (ArcGIS API key med
-  Location services > Basemaps) laaser opp Flyfoto-basemappet i ECDIS med
-  token paa Esri-flisene - uten nokkel er Flyfoto skjult, siden anonym bruk
-  paa messe er utenfor Esris vilkaar. Flere nokler kan legges til senere.
+  Location services > Basemaps + Geocoding) laaser opp tre ting i ECDIS:
+  Flyfoto-basemappet (Esri World Imagery), Ocean-basemappet (Esri World
+  Ocean Base med GEBCO/NOAA-bathymetri) og stedssoket oppe til venstre
+  (skriv "Bergen" eller et havnenavn og kartet flyr dit, ArcGIS Geocoding).
+  Uten nokkel er Flyfoto/Ocean skjult og soket borte, siden anonym bruk paa
+  messe er utenfor Esris vilkaar. Flere nokler kan legges til senere.
 - HT ECDIS husker seg selv mellom omstarter: skipets posisjon, kurs, rute,
   kartlag, palett og basemap lagres hvert 5. sekund (localStorage + server i
   `data/ecdis-state.json`). Ved neste oppstart dodregnes skipet frem langs
