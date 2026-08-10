@@ -26,6 +26,7 @@ const DEFAULT_KIOSK_CONFIG = {
       airHockey: "/air-hockey-standalone.html",
       containerStacker: "/container-stacker-standalone.html",
       fjordRunner: "/fjord-runner-standalone.html",
+      deepDive: "/deep-dive-standalone.html",
       sonarSequence: "/sonar-sequence-standalone.html",
       admin: "/admin.html",
       adminRush: "/admin-rush.html",
@@ -379,6 +380,7 @@ function normalizeDuelGameSettings(payload, currentDuelGame = {}) {
 const GAMES = {
   stacker: { label: "Container Stacker", configKey: "stackerGame" },
   runner: { label: "Fjord Runner", configKey: "runnerGame" },
+  dive: { label: "Deep Dive", configKey: "diveGame" },
   rush: { label: "Harbor Rush", configKey: "game" },
   duel: { label: "Bridge Duel", configKey: "duelGame" },
   airhockey: { label: "HT Air Hockey", configKey: "airHockeyGame" },
@@ -430,6 +432,20 @@ const GAME_SCHEMAS = {
     },
     booleans: { enableJump: true, enableWeather: true }
   },
+  dive: {
+    numbers: {
+      startSpeedPercent: { min: 50, max: 180, fallback: 100 },
+      speedRampPercent: { min: 0, max: 250, fallback: 100 },
+      maxSpeedPercent: { min: 110, max: 320, fallback: 220 },
+      gapSizePercent: { min: 60, max: 160, fallback: 100 },
+      obstacleSpacingPercent: { min: 60, max: 180, fallback: 100 },
+      liftPercent: { min: 60, max: 160, fallback: 100 },
+      pearlPoints: { min: 1, max: 200, fallback: 25 },
+      distancePointsPer100m: { min: 0, max: 100, fallback: 10 },
+      mineStartDepth: { min: 100, max: 2000, fallback: 400 }
+    },
+    booleans: { enableMines: true }
+  },
   sonar: {
     numbers: {
       nodeCount: { min: 4, max: 9, fallback: 6 },
@@ -440,7 +456,7 @@ const GAME_SCHEMAS = {
       pointsPerStep: { min: 1, max: 100, fallback: 10 },
       speedUpPercent: { min: 0, max: 20, fallback: 4 }
     },
-    booleans: { enableSound: true, enableTimeout: true }
+    booleans: { enableTimeout: true }
   }
 };
 
@@ -475,6 +491,7 @@ function publicConfig(config) {
     airHockeyGame: config.airHockeyGame || {},
     stackerGame: config.stackerGame || {},
     runnerGame: config.runnerGame || {},
+    diveGame: config.diveGame || {},
     sonarGame: config.sonarGame || {},
     privacy: config.privacy,
     theme: config.theme
@@ -747,6 +764,11 @@ function parseJsonBody(request) {
 
     request.on("error", reject);
   });
+}
+
+// Navn vises paa kiosk-leaderboards; fjern tegn som kan tolkes som HTML.
+function sanitizeName(value) {
+  return String(value || "").replace(/[<>]/g, "").trim().slice(0, 40);
 }
 
 function safeEquals(left, right) {
@@ -1086,7 +1108,7 @@ async function handleApi(request, response, url) {
     const now = new Date().toISOString();
     const entry = {
       id: crypto.randomUUID(),
-      name: String(payload.name || "").trim(),
+      name: sanitizeName(payload.name),
       email: String(payload.email || "").trim().toLowerCase(),
       phone: String(payload.phone || "").trim(),
       score: session.score,
@@ -1128,7 +1150,7 @@ async function handleApi(request, response, url) {
     const game = normalizeGameId(entryPayload.game) || DEFAULT_GAME_ID;
     const entry = {
       id: crypto.randomUUID(),
-      name: String(entryPayload.name).trim().slice(0, 40),
+      name: sanitizeName(entryPayload.name),
       email: String(entryPayload.email || "").trim().toLowerCase(),
       phone: String(entryPayload.phone || "").trim(),
       score,

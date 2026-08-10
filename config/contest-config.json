@@ -139,6 +139,19 @@
     "enableJump": true,
     "enableWeather": true
   },
+  "diveGame": {
+    "difficultyName": "Normal",
+    "startSpeedPercent": 100,
+    "speedRampPercent": 100,
+    "maxSpeedPercent": 220,
+    "gapSizePercent": 100,
+    "obstacleSpacingPercent": 100,
+    "liftPercent": 100,
+    "pearlPoints": 25,
+    "distancePointsPer100m": 10,
+    "mineStartDepth": 400,
+    "enableMines": true
+  },
   "sonarGame": {
     "difficultyName": "Normal",
     "nodeCount": 6,
@@ -148,7 +161,6 @@
     "startLength": 1,
     "pointsPerStep": 10,
     "speedUpPercent": 4,
-    "enableSound": false,
     "enableTimeout": true
   },
   "privacy": {

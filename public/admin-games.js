@@ -36,6 +36,17 @@ const FIELDS = {
     { key: "streakBonusPercent", label: "Streak bonus", suffix: "%", min: 0, max: 300 },
     { key: "shieldSeconds", label: "Recovery time", suffix: "s", min: 0, max: 6 }
   ],
+  dive: [
+    { key: "startSpeedPercent", label: "Start speed", suffix: "%", min: 50, max: 180 },
+    { key: "speedRampPercent", label: "Speed ramp", suffix: "%", min: 0, max: 250 },
+    { key: "maxSpeedPercent", label: "Top speed", suffix: "%", min: 110, max: 320 },
+    { key: "gapSizePercent", label: "Gap size", suffix: "%", min: 60, max: 160 },
+    { key: "obstacleSpacingPercent", label: "Rock spacing", suffix: "%", min: 60, max: 180 },
+    { key: "liftPercent", label: "Lift strength", suffix: "%", min: 60, max: 160 },
+    { key: "pearlPoints", label: "Points per pearl", suffix: "", min: 1, max: 200 },
+    { key: "distancePointsPer100m", label: "Points per 100 m", suffix: "", min: 0, max: 100 },
+    { key: "mineStartDepth", label: "Mines from depth", suffix: "m", min: 100, max: 2000 }
+  ],
   sonar: [
     { key: "nodeCount", label: "Contacts", suffix: "", min: 4, max: 9 },
     { key: "pingMs", label: "Ping length", suffix: "ms", min: 180, max: 1200 },
@@ -63,10 +74,8 @@ const TOGGLES = {
     { key: "enableJump", label: "Jump over low obstacles" },
     { key: "enableWeather", label: "Weather changes" }
   ],
-  sonar: [
-    { key: "enableTimeout", label: "Answer timeout" },
-    { key: "enableSound", label: "Sound" }
-  ],
+  dive: [{ key: "enableMines", label: "Sea mines" }],
+  sonar: [{ key: "enableTimeout", label: "Answer timeout" }],
   airhockey: [{ key: "enablePowerUps", label: "Power-ups" }]
 };
 
@@ -168,6 +177,47 @@ const PRESETS = {
       enableWeather: true
     }
   },
+  dive: {
+    Easy: {
+      difficultyName: "Easy",
+      startSpeedPercent: 80,
+      speedRampPercent: 60,
+      maxSpeedPercent: 170,
+      gapSizePercent: 130,
+      obstacleSpacingPercent: 130,
+      liftPercent: 100,
+      pearlPoints: 25,
+      distancePointsPer100m: 10,
+      mineStartDepth: 700,
+      enableMines: true
+    },
+    Normal: {
+      difficultyName: "Normal",
+      startSpeedPercent: 100,
+      speedRampPercent: 100,
+      maxSpeedPercent: 220,
+      gapSizePercent: 100,
+      obstacleSpacingPercent: 100,
+      liftPercent: 100,
+      pearlPoints: 25,
+      distancePointsPer100m: 10,
+      mineStartDepth: 400,
+      enableMines: true
+    },
+    Hard: {
+      difficultyName: "Hard",
+      startSpeedPercent: 125,
+      speedRampPercent: 160,
+      maxSpeedPercent: 290,
+      gapSizePercent: 82,
+      obstacleSpacingPercent: 84,
+      liftPercent: 110,
+      pearlPoints: 30,
+      distancePointsPer100m: 14,
+      mineStartDepth: 250,
+      enableMines: true
+    }
+  },
   sonar: {
     Easy: {
       difficultyName: "Easy",
@@ -178,7 +228,6 @@ const PRESETS = {
       startLength: 1,
       pointsPerStep: 10,
       speedUpPercent: 2,
-      enableSound: true,
       enableTimeout: true
     },
     Normal: {
@@ -190,7 +239,6 @@ const PRESETS = {
       startLength: 1,
       pointsPerStep: 10,
       speedUpPercent: 4,
-      enableSound: true,
       enableTimeout: true
     },
     Hard: {
@@ -202,7 +250,6 @@ const PRESETS = {
       startLength: 2,
       pointsPerStep: 12,
       speedUpPercent: 7,
-      enableSound: true,
       enableTimeout: true
     }
   },

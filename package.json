@@ -11,6 +11,7 @@
     "airhockey": "node launcher.js --airhockey",
     "stacker": "node launcher.js --stacker",
     "runner": "node launcher.js --runner",
+    "dive": "node launcher.js --dive",
     "sonar": "node launcher.js --sonar",
     "kiosk": "node launcher.js --kiosk"
   },

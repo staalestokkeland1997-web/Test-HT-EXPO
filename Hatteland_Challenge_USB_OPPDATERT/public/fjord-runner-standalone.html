@@ -443,6 +443,15 @@
         color: var(--gold);
       }
 
+
+      .rank-teaser {
+        margin: 0;
+        min-height: 20px;
+        font-size: clamp(12px, 1.5vmin, 17px);
+        font-weight: 800;
+        color: var(--gold);
+      }
+
       .board {
         display: grid;
         gap: 6px;
@@ -659,6 +668,7 @@
                 <strong id="finalRecord">0</strong>
               </article>
             </div>
+            <p class="rank-teaser" id="rankTeaser" aria-live="polite"></p>
 
             <form id="registrationForm" class="form" novalidate>
               <input id="nameInput" type="text" maxlength="40" placeholder="Name *" autocomplete="name" />
@@ -721,6 +731,7 @@
           finalCargo: document.getElementById("finalCargo"),
           finalStreak: document.getElementById("finalStreak"),
           finalRecord: document.getElementById("finalRecord"),
+          rankTeaser: document.getElementById("rankTeaser"),
           startBoard: document.getElementById("startBoard"),
           endBoard: document.getElementById("endBoard"),
           form: document.getElementById("registrationForm"),
@@ -784,9 +795,11 @@
         var lastTime = 0;
         var holdExitTimer = null;
         var holdExitProgressTimer = null;
+        var endOverlayTimer = null;
         var HOLD_EXIT_MS = 1200;
         var idleTimer = null;
         var IDLE_RESET_MS = 90000;
+        var boardEntries = [];
         var gesture = null;
 
         function percent(value) {
@@ -820,6 +833,9 @@
         }
 
         function zoneAt(distance) {
+          // Vaer-syklusen kan slaas av fra admin - da blir det morgenfjord
+          // hele runden.
+          if (!settings.enableWeather) distance = 0;
           var lower = ZONES[0];
           var upper = ZONES[ZONES.length - 1];
 
@@ -848,6 +864,7 @@
         }
 
         function zoneNameFor(distance) {
+          if (!settings.enableWeather) distance = 0;
           var name = ZONES[0].name;
           for (var i = 0; i < ZONES.length; i += 1) {
             if (distance >= ZONES[i].at) name = ZONES[i].name;
@@ -882,6 +899,8 @@
             shake: 0,
             flash: 0,
             damageFlash: 0,
+            recordScore: getRecord(),
+            recordAnnounced: false,
             elapsed: 0
           };
         }
@@ -1032,7 +1051,7 @@
           if (state.shieldUntil > state.elapsed) return;
           state.lives -= 1;
           state.streak = 0;
-          state.shieldUntil = state.elapsed + Number(settings.shieldSeconds || 2) * 1000;
+          state.shieldUntil = state.elapsed + (Number.isFinite(Number(settings.shieldSeconds)) ? Number(settings.shieldSeconds) : 2) * 1000;
           state.shake = 1;
           state.damageFlash = 1;
           renderLives();
@@ -1064,6 +1083,9 @@
         }
 
         function update(dt) {
+          // Ingen tilstandsendringer etter at runden er over - ellers kan
+          // en sen last i samme frame endre score etter at den er laast.
+          if (state.over) return;
           state.elapsed += dt * 1000;
           state.wavePhase += dt;
           state.shake = Math.max(0, state.shake - dt * 3);
@@ -1095,16 +1117,21 @@
           var boatLaneExact = state.laneOffset;
 
           state.entities = state.entities.filter(function (entity) {
+            // Svept vindu: paa hoy fart kan z hoppe forbi baaten paa en
+            // treg frame, saa sjekk hele strekningen fra forrige posisjon.
+            var previousZ = entity.z;
             entity.z -= state.speed * dt;
 
-            if (entity.z < BOAT_Z + 0.9 && entity.z > BOAT_Z - 0.9) {
+            if (entity.z < BOAT_Z + 0.9 && previousZ > BOAT_Z - 0.9) {
               var laneDistance = Math.abs(entity.lane - boatLaneExact);
 
               if (entity.kind === "cargo" && !entity.taken && laneDistance < 0.55) {
                 collect(entity);
               }
 
-              if (entity.kind === "obstacle" && !entity.hit && laneDistance < 0.6) {
+              // 0.45, ikke 0.6: baaten er visuelt smalere enn et helt lop,
+              // og med 0.6 kunne den treffe i to lop samtidig midt i bytte.
+              if (entity.kind === "obstacle" && !entity.hit && laneDistance < 0.45) {
                 // Lave hindringer kan hoppes over.
                 if (!(entity.low && jumping)) {
                   entity.hit = true;
@@ -1115,6 +1142,22 @@
                   var projected = projection(entity.z);
                   addPop("+15 CLEARED", laneScreenX(LANES[entity.lane], projected.p), projected.y - 34, "#4fe3ff");
                 }
+              }
+            }
+
+            // Naer-miss: hindringen passerte i nabolopet - liten bonus og
+            // en synlig bekreftelse paa at du saa vidt klarte deg.
+            if (
+              entity.kind === "obstacle" &&
+              !entity.hit &&
+              !entity.rewarded &&
+              entity.z < BOAT_Z - 0.9
+            ) {
+              entity.rewarded = true;
+              var passDistance = Math.abs(entity.lane - boatLaneExact);
+              if (passDistance >= 0.45 && passDistance < 1.05) {
+                state.score += 5;
+                addPop("+5 CLOSE", subPopX(), projection(BOAT_Z).y - 60, "#4fe3ff");
               }
             }
 
@@ -1142,9 +1185,21 @@
             if (state.banner.life <= 0) state.banner = null;
           }
 
-          var scorePoints = Math.floor(state.distance / 100) * Number(settings.distancePointsPer100m || 10);
+          var scorePoints = Math.floor(state.distance / 100) * (Number.isFinite(Number(settings.distancePointsPer100m)) ? Number(settings.distancePointsPer100m) : 10);
           state.displayScore = state.score + scorePoints;
+
+          // Rekordtempo midt i runden - den sterkeste grunnen til aa holde ut.
+          if (state.recordScore > 0 && !state.recordAnnounced && state.displayScore > state.recordScore) {
+            state.recordAnnounced = true;
+            state.flash = Math.max(state.flash, 0.5);
+            showBanner("NEW RECORD PACE", "#f5c84b");
+          }
+
           updateHud();
+        }
+
+        function subPopX() {
+          return laneScreenX(LANES[state.lane], projection(BOAT_Z).p);
         }
 
         function renderLives() {
@@ -1596,6 +1651,10 @@
             settings = pendingSettings;
             pendingSettings = null;
           }
+          clearTimeout(endOverlayTimer);
+          if (document.activeElement && document.activeElement.blur) {
+            document.activeElement.blur();
+          }
           state = createState();
           state.running = true;
           document.body.classList.add("game-running");
@@ -1603,6 +1662,7 @@
           ui.endOverlay.classList.add("hidden");
           ui.pauseOverlay.classList.add("hidden");
           ui.message.textContent = "";
+          ui.rankTeaser.textContent = "";
           ui.form.classList.add("hidden");
           resizeCanvas();
           renderLives();
@@ -1621,7 +1681,12 @@
           clearHoldExit();
           ui.pauseOverlay.classList.add("hidden");
 
-          var finalScore = state.displayScore || state.score;
+          // Regn sluttsummen fra live-verdier - displayScore kan henge en
+          // frame etter naar doden inntreffer midt i en oppdatering.
+          var finalScore = Math.min(
+            99999,
+            state.score + Math.floor(state.distance / 100) * (Number.isFinite(Number(settings.distancePointsPer100m)) ? Number(settings.distancePointsPer100m) : 10)
+          );
           var record = getRecord();
           var isRecord = finalScore > record;
           rememberRecord(finalScore);
@@ -1637,6 +1702,8 @@
           ui.finalCargo.textContent = String(state.cargo);
           ui.finalStreak.textContent = String(state.bestStreak);
           ui.finalRecord.textContent = String(Math.max(record, finalScore));
+          state.lastFinalScore = finalScore;
+          updateRankTeaser(state.lastFinalScore);
 
           ui.form.classList.remove("hidden");
           ui.saveButton.disabled = false;
@@ -1648,8 +1715,13 @@
 
           state.finalScore = finalScore;
 
-          setTimeout(function () {
-            ui.endOverlay.classList.remove("hidden");
+          clearTimeout(endOverlayTimer);
+          var endedState = state;
+          endOverlayTimer = setTimeout(function () {
+            // Vis bare sluttskjermen hvis vi fortsatt er i samme runde.
+            if (state === endedState) {
+              ui.endOverlay.classList.remove("hidden");
+            }
           }, 700);
 
           refreshBoard();
@@ -1658,6 +1730,7 @@
         function exitToStart() {
           cancelAnimationFrame(animationId);
           clearHoldExit();
+          clearTimeout(endOverlayTimer);
           document.body.classList.remove("game-running");
           state = createState();
           ui.pauseOverlay.classList.add("hidden");
@@ -1666,6 +1739,8 @@
           renderLives();
           updateHud();
           render();
+          // Hent ferske innstillinger naar vi er tilbake paa startskjermen.
+          loadSettings();
         }
 
         function pauseGame() {
@@ -1682,6 +1757,9 @@
           ui.pauseOverlay.classList.add("hidden");
           document.body.classList.add("game-running");
           lastTime = performance.now();
+          // Avbryt et eventuelt ventende frame forst, ellers kan raske
+          // pause/fortsett-trykk gi to samtidige lokker og dobbel fart.
+          cancelAnimationFrame(animationId);
           animationId = requestAnimationFrame(loop);
         }
 
@@ -1700,6 +1778,24 @@
         function rememberRecord(score) {
           if (score > getRecord()) {
             localStorage.setItem("runnerRecordScore", String(score));
+          }
+        }
+
+
+        // "Du ville tatt X. plass" - konkret grunn til aa lagre scoren.
+        function updateRankTeaser(finalScore) {
+          if (!ui.rankTeaser) return;
+          if (!boardEntries.length) {
+            ui.rankTeaser.textContent = "The board is empty. Save it and take #1.";
+            return;
+          }
+          var rank = boardEntries.filter(function (entry) {
+            return Number(entry.score || 0) >= finalScore;
+          }).length + 1;
+          if (rank <= 10) {
+            ui.rankTeaser.textContent = "That takes #" + rank + " on the board. Save it!";
+          } else {
+            ui.rankTeaser.textContent = "";
           }
         }
 
@@ -1732,8 +1828,12 @@
             })
             .then(function (payload) {
               if (!payload) return;
-              renderBoard(ui.startBoard, payload.entries);
-              renderBoard(ui.endBoard, payload.entries);
+              boardEntries = payload.entries || [];
+              renderBoard(ui.startBoard, boardEntries);
+              renderBoard(ui.endBoard, boardEntries);
+              if (state && state.over && state.lastFinalScore !== undefined) {
+                updateRankTeaser(state.lastFinalScore);
+              }
             })
             .catch(function () {
               /* offline */
@@ -1777,7 +1877,8 @@
               email: ui.email.value.trim(),
               phone: ui.phone.value.trim(),
               consent: true,
-              score: state.finalScore || state.score,
+              // Serveren avviser score over maxAcceptedScore.
+              score: Math.min(99999, state.finalScore || state.score),
               playedAt: new Date().toISOString()
             })
           })
@@ -1793,14 +1894,18 @@
                 ui.saveButton.textContent = "Save score";
                 return;
               }
-              renderBoard(ui.endBoard, result.payload.leaderboard);
-              renderBoard(ui.startBoard, result.payload.leaderboard);
+              boardEntries = result.payload.leaderboard || [];
+              renderBoard(ui.endBoard, boardEntries);
+              renderBoard(ui.startBoard, boardEntries);
               ui.message.textContent = "Saved to the Fjord Runner board.";
+              ui.rankTeaser.textContent = "You are on the board!";
               ui.saveButton.textContent = "Saved";
             })
             .catch(function () {
-              ui.message.textContent = "No server connection. The score stayed on this machine.";
-              ui.saveButton.textContent = "Saved locally";
+              // Ikke lås knappen ved nettverksglipp - la spilleren prove igjen.
+              ui.message.textContent = "No server connection. Tap to try again.";
+              ui.saveButton.disabled = false;
+              ui.saveButton.textContent = "Try again";
             });
         }
 
@@ -1820,8 +1925,9 @@
               }
 
               var next = Object.assign({}, DEFAULTS, payload.runnerGame || {});
-              if (state && state.running) {
-                // Ikke bytt regler midt i en runde - vent til neste start.
+              if (state && (state.running || state.over)) {
+                // Ikke bytt regler midt i en runde, og ikke nullstill
+                // staten mens sluttskjermen (med lagre-knappen) vises.
                 pendingSettings = next;
                 return;
               }
@@ -1897,7 +2003,18 @@
           ui.steerRight.classList.remove("pressed");
         });
 
+        // Slipp utenfor canvas (f.eks. mus dratt ut) skal ogsaa slukke pilene.
+        window.addEventListener("pointerup", function () {
+          ui.steerLeft.classList.remove("pressed");
+          ui.steerRight.classList.remove("pressed");
+        });
+
         window.addEventListener("keydown", function (event) {
+          var handled = ["ArrowLeft", "ArrowRight", "ArrowUp", " "].indexOf(event.key) !== -1;
+          if (!handled) return;
+          // Uten preventDefault ville mellomrom "klikke" den fortsatt
+          // fokuserte startknappen og restarte runden midt i spillet.
+          event.preventDefault();
           if (event.key === "ArrowLeft") steer(-1);
           if (event.key === "ArrowRight") steer(1);
           if (event.key === "ArrowUp" || event.key === " ") jump();
@@ -1942,7 +2059,8 @@
         function armIdleReset() {
           clearTimeout(idleTimer);
           idleTimer = setTimeout(function () {
-            if (state && !state.running && ui.startOverlay.classList.contains("hidden")) {
+            // Ogsaa et pauset og forlatt spill skal tilbake til start.
+            if (state && (state.paused || (!state.running && ui.startOverlay.classList.contains("hidden")))) {
               exitToStart();
             }
             armIdleReset();
