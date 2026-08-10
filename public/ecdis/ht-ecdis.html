@@ -707,6 +707,7 @@ class Component extends DCLogic {
     this.fetchLandMask();
     this.loadTrack();
     this.loadRoute();
+    window.__ecdis = this;
     this.loadShipState();
     this._persistT = setInterval(() => { if (!document.hidden) this.saveShipState(); }, 5000);
     this._pagehideH = () => this.saveShipState(true);
@@ -1543,7 +1544,7 @@ class Component extends DCLogic {
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(msg, this.W / 2, y + 13.5); ctx.restore();
   }
-  TILE(layer) { const M = { sjokart: { f: (z, x, y) => this.kv('sjokartraster', z, x, y), max: 18 }, topo: { f: (z, x, y) => this.kv('topo', z, x, y), max: 18 }, flyfoto: { f: (z, x, y) => { const t = (window.__kioskKeys || {}).arcgis; return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}` + (t ? `?token=${t}` : ''); }, max: 19 }, dark: { f: (z, x, y) => `https://${'abc'[(x + y) % 3]}.basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png`, max: 19 }, light: { f: (z, x, y) => `https://${'abc'[(x + y) % 3]}.basemaps.cartocdn.com/light_all/${z}/${x}/${y}.png`, max: 19 }, seamark: { f: (z, x, y) => `https://tiles.openseamap.org/seamark/${z}/${x}/${y}.png`, max: 18 }, bathy: { f: (z, x, y) => { const h = 20037508.342789244, ts = 2 * h / Math.pow(2, z); const minx = -h + x * ts, maxx = minx + ts, maxy = h - y * ts, miny = maxy - ts; return `https://ows.emodnet-bathymetry.eu/wms?service=WMS&request=GetMap&version=1.3.0&layers=emodnet:mean_multicolour&styles=&format=image/png&transparent=true&crs=EPSG:3857&width=256&height=256&bbox=${minx},${miny},${maxx},${maxy}`; }, max: 13 } }; return M[layer]; }
+  TILE(layer) { const M = { sjokart: { f: (z, x, y) => this.kv('sjokartraster', z, x, y), max: 18 }, topo: { f: (z, x, y) => this.kv('topo', z, x, y), max: 18 }, flyfoto: { f: (z, x, y) => { const t = (window.__kioskKeys || {}).arcgis; return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}` + (t ? `?token=${t}` : ''); }, max: 19 }, ocean: { f: (z, x, y) => { const t = (window.__kioskKeys || {}).arcgis; return `https://services.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/${z}/${y}/${x}` + (t ? `?token=${t}` : ''); }, max: 16 }, dark: { f: (z, x, y) => `https://${'abc'[(x + y) % 3]}.basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png`, max: 19 }, light: { f: (z, x, y) => `https://${'abc'[(x + y) % 3]}.basemaps.cartocdn.com/light_all/${z}/${x}/${y}.png`, max: 19 }, seamark: { f: (z, x, y) => `https://tiles.openseamap.org/seamark/${z}/${x}/${y}.png`, max: 18 }, bathy: { f: (z, x, y) => { const h = 20037508.342789244, ts = 2 * h / Math.pow(2, z); const minx = -h + x * ts, maxx = minx + ts, maxy = h - y * ts, miny = maxy - ts; return `https://ows.emodnet-bathymetry.eu/wms?service=WMS&request=GetMap&version=1.3.0&layers=emodnet:mean_multicolour&styles=&format=image/png&transparent=true&crs=EPSG:3857&width=256&height=256&bbox=${minx},${miny},${maxx},${maxy}`; }, max: 13 } }; return M[layer]; }
   thumbUrl(layer) { const z = 9, x = 263, y = 148; return this.TILE(layer).f(z, x, y); }
   MAX_TILE_INFLIGHT = 6;
   // `counted` = started by the pumpTiles scheduler. Direct fetches (land
@@ -1867,7 +1868,7 @@ class Component extends DCLogic {
       onToggleLeft: () => this.setState({ rightOpen: s.rightOpen && s.rightTab === 'chart' ? false : true, rightTab: 'chart' }),
       onTabChart: () => this.setState({ rightTab: 'chart' }),
       onBaseSjo: () => this.setState({ base: 'sjokart' }), onBaseTopo: () => this.setState({ base: 'topo' }), onBaseDark: () => this.setState({ base: 'dark' }), onBaseFly: () => this.setState({ base: 'flyfoto' }),
-      baseRows: [['sjokart', 'Nautical'], ['flyfoto', 'Aerial'], ['topo', 'Topo'], ['dark', 'Dark']].filter(([k]) => k !== 'flyfoto' || (window.__kioskKeys || {}).arcgis).map(([k, name]) => ({ name, thumbStyle: C(`width:100%;height:52px;background-image:url("${this.thumbUrl(k)}");background-size:cover;background-position:center;background-color:var(--seg,rgba(118,118,128,.18));`), select: () => this.setState({ base: k }), style: C(`border:1.5px solid ${s.base === k ? A : 'var(--hair,rgba(60,60,67,.12))'};background:var(--card,rgba(255,255,255,.5));border-radius:12px;overflow:hidden;cursor:pointer;padding:0;`), check: C(`color:${A};font-size:12px;font-weight:800;${s.base === k ? '' : 'visibility:hidden;'}`) })),
+      baseRows: [['sjokart', 'Nautical'], ['ocean', 'Ocean'], ['flyfoto', 'Aerial'], ['topo', 'Topo'], ['dark', 'Dark']].filter(([k]) => (k !== 'flyfoto' && k !== 'ocean') || (window.__kioskKeys || {}).arcgis).map(([k, name]) => ({ name, thumbStyle: C(`width:100%;height:52px;background-image:url("${this.thumbUrl(k)}");background-size:cover;background-position:center;background-color:var(--seg,rgba(118,118,128,.18));`), select: () => this.setState({ base: k }), style: C(`border:1.5px solid ${s.base === k ? A : 'var(--hair,rgba(60,60,67,.12))'};background:var(--card,rgba(255,255,255,.5));border-radius:12px;overflow:hidden;cursor:pointer;padding:0;`), check: C(`color:${A};font-size:12px;font-weight:800;${s.base === k ? '' : 'visibility:hidden;'}`) })),
       onShallow: (e) => this.setSafety('shallowC', +e.target.value), onSafety: (e) => this.setSafety('safetyC', +e.target.value), onDeep: (e) => this.setSafety('deepC', +e.target.value),
       onSafetyDepth: (e) => this.setSafety('safetyD', +e.target.value),
       onCatBase: () => this.setDisplayCat('base'), onCatStd: () => this.setDisplayCat('standard'), onCatAll: () => this.setDisplayCat('all'),
@@ -2001,7 +2002,7 @@ class Component extends DCLogic {
         this._restoredUi = true;
         const u = snap.ui, st = {};
         if (u.palette) st.palette = u.palette;
-        if (u.base && (u.base !== 'flyfoto' || (window.__kioskKeys || {}).arcgis)) st.base = u.base;
+        if (u.base && ((u.base !== 'flyfoto' && u.base !== 'ocean') || (window.__kioskKeys || {}).arcgis)) st.base = u.base;
         if (u.orient) st.orient = u.orient;
         if (u.displayCat) st.displayCat = u.displayCat;
         if (u.layers) st.layers = { ...this.state.layers, ...u.layers };
@@ -2050,6 +2051,103 @@ class Component extends DCLogic {
   persistTrack() { try { const cut = Date.now() - 12 * 3600e3; const t = this.track.filter(p => (p.t || 0) > cut); localStorage.setItem('mrd_track', JSON.stringify(t.slice(-1200))); } catch (e) {} }
   loadTrack() { try { const raw = localStorage.getItem('mrd_track'); if (raw) { const t = JSON.parse(raw); const cut = Date.now() - 12 * 3600e3; this.track = t.filter(p => p && p.t > cut); } } catch (e) {} }
 }
+</script>
+<script>
+// Stedssok via ArcGIS Geocoding: skriv "Bergen" eller et havnenavn og kartet
+// flyr dit. Vises bare naar apiKeys.arcgis er satt i kioskens config.
+(function () {
+  var key = (window.__kioskKeys || {}).arcgis;
+  if (!key) return;
+  var wrap = document.createElement("div");
+  wrap.style.cssText = "position:fixed;left:16px;top:72px;z-index:9998;width:262px;font-family:'Inter',system-ui,sans-serif;";
+  var input = document.createElement("input");
+  input.type = "search";
+  input.placeholder = "Search place or harbor…";
+  input.autocomplete = "off";
+  input.style.cssText = "width:100%;min-height:44px;padding:0 14px;border:0.5px solid rgba(60,60,67,0.2);border-radius:12px;background:rgba(255,255,255,0.92);color:#1c1c1e;font-size:13px;font-weight:600;outline:none;box-shadow:0 8px 24px rgba(0,0,0,0.14);backdrop-filter:blur(10px);";
+  var list = document.createElement("div");
+  list.style.cssText = "margin-top:6px;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.2);display:none;";
+  wrap.appendChild(input); wrap.appendChild(list);
+  document.body.appendChild(wrap);
+
+  var timer = null, seq = 0, current = [];
+
+  function app() { return window.__ecdis || null; }
+
+  function flyTo(lat, lon) {
+    var a = app(); if (!a) return;
+    a.setState({ followShip: false });
+    var v = a.view;
+    var from = { lat: v.lat, lon: v.lon, zoom: v.zoom };
+    var to = { lat: lat, lon: lon, zoom: Math.max(v.zoom, 11.5) };
+    var t0 = performance.now(), dur = 1200;
+    function step(now) {
+      var f = Math.min(1, (now - t0) / dur);
+      var e = f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2; // easeInOutQuad
+      v.lat = from.lat + (to.lat - from.lat) * e;
+      v.lon = from.lon + (to.lon - from.lon) * e;
+      v.zoom = from.zoom + (to.zoom - from.zoom) * e;
+      if (f < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function render(items) {
+    current = items;
+    list.innerHTML = "";
+    list.style.display = items.length ? "block" : "none";
+    items.forEach(function (item, index) {
+      var row = document.createElement("button");
+      row.type = "button";
+      row.textContent = item.address;
+      row.style.cssText = "display:block;width:100%;min-height:44px;padding:10px 14px;border:0;border-top:" + (index ? "0.5px solid rgba(60,60,67,0.12)" : "0") + ";background:rgba(255,255,255,0.96);color:#1c1c1e;font:600 12px/1.35 'Inter',system-ui,sans-serif;text-align:left;cursor:pointer;";
+      row.addEventListener("pointerup", function (event) {
+        event.preventDefault();
+        input.value = item.address;
+        render([]);
+        input.blur();
+        flyTo(item.lat, item.lon);
+      });
+      list.appendChild(row);
+    });
+  }
+
+  function search(text) {
+    var mine = ++seq;
+    var a = app();
+    var bias = a && a.ownShip ? "&location=" + a.ownShip.lon.toFixed(4) + "," + a.ownShip.lat.toFixed(4) : "";
+    var url = "https://geocode-api.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates" +
+      "?f=json&outFields=none&maxLocations=5&singleLine=" + encodeURIComponent(text) + bias + "&token=" + encodeURIComponent(key);
+    fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+      if (mine !== seq) return;
+      var items = ((data && data.candidates) || []).map(function (c) {
+        return { address: c.address, lat: c.location.y, lon: c.location.x };
+      });
+      render(items);
+    }).catch(function () { if (mine === seq) render([]); });
+  }
+
+  input.addEventListener("input", function () {
+    clearTimeout(timer);
+    var text = input.value.trim();
+    if (text.length < 2) { seq++; render([]); return; }
+    timer = setTimeout(function () { search(text); }, 350);
+  });
+  input.addEventListener("keydown", function (event) {
+    if (event.key === "Enter" && current.length) {
+      event.preventDefault();
+      input.value = current[0].address;
+      var first = current[0];
+      render([]);
+      input.blur();
+      flyTo(first.lat, first.lon);
+    }
+    if (event.key === "Escape") { seq++; render([]); input.blur(); }
+  });
+  document.addEventListener("pointerdown", function (event) {
+    if (!wrap.contains(event.target)) render([]);
+  });
+})();
 </script>
 <a href="/select.html" onpointerup="if(!event.isPrimary){event.preventDefault();window.location.href=this.href;}" style="position:fixed;left:14px;bottom:14px;z-index:99999;min-height:46px;display:inline-grid;place-items:center;padding:0 20px;border-radius:12px;background:rgba(255,255,255,0.92);color:#1c1c1e;border:0.5px solid rgba(60,60,67,0.2);font:700 11px/1 'Inter',system-ui,sans-serif;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;box-shadow:0 8px 24px rgba(0,0,0,0.18);backdrop-filter:blur(10px);-webkit-tap-highlight-color:transparent;">Main kiosk</a>
 </body>
