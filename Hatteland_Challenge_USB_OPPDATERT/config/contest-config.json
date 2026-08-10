@@ -41,8 +41,6 @@
     "maxTargetSize": 148,
     "scoreHighlightThreshold": 260,
     "maxAcceptedScore": 99999,
-    "registrationTimeoutSeconds": 600,
-    "maxSessionAgeSeconds": 900,
     "enableNearMissWarnings": true,
     "enableProgressiveDifficulty": true,
     "enablePowerUps": true,

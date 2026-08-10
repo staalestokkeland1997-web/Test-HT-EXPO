@@ -80,8 +80,6 @@ const KIOSK_CONFIG = loadKioskConfig();
 const HOST = String(process.env.HOST || KIOSK_CONFIG.server.host || "127.0.0.1");
 const PORT = Number(process.env.PORT || KIOSK_CONFIG.server.port || 3000);
 
-const activeSessions = new Map();
-
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -561,20 +559,6 @@ function latestBackupInfo() {
   return backups[0] || null;
 }
 
-function cleanupExpiredSessions(config) {
-  const now = Date.now();
-  const expiryMs = config.game.registrationTimeoutSeconds * 1000;
-
-  for (const [sessionId, session] of activeSessions.entries()) {
-    const age = now - session.startedAt;
-    const pendingAge = session.finishedAt ? now - session.finishedAt : age;
-
-    if (age > config.game.maxSessionAgeSeconds * 1000 || pendingAge > expiryMs) {
-      activeSessions.delete(sessionId);
-    }
-  }
-}
-
 function getLeaderboard(entries, limit = 10, game = null) {
   const scoped = game ? entries.filter((entry) => entry.game === game) : entries;
 
@@ -602,89 +586,6 @@ function getAllLeaderboards(entries, limit = 10) {
   );
 }
 
-function getStreakMultiplier(streak) {
-  if (streak >= 12) {
-    return 2;
-  }
-
-  if (streak >= 6) {
-    return 1.5;
-  }
-
-  if (streak >= 3) {
-    return 1.25;
-  }
-
-  return 1;
-}
-
-function getScoredHitPoints(basePoints, streak) {
-  return Math.round(basePoints * getStreakMultiplier(streak));
-}
-
-function calculateExpectedScoreFromStats(stats, gameConfig) {
-  let score = 0;
-  let streak = 0;
-  let shieldCharges = 0;
-  let doubleActiveHits = Number(stats.doubleActiveHits || 0);
-
-  const events = Array.isArray(stats.events) ? stats.events : [];
-
-  events.forEach((event) => {
-    if (event === "power-double") {
-      doubleActiveHits += 6;
-      return;
-    }
-
-    if (event === "power-shield") {
-      shieldCharges = Math.min(2, shieldCharges + 1);
-      return;
-    }
-
-    if (event === "power-slow" || event === "time") {
-      return;
-    }
-
-    if (event === "bad") {
-      streak = 0;
-
-      if (shieldCharges > 0) {
-        shieldCharges -= 1;
-      } else {
-        score -= gameConfig.badTargetPenalty;
-      }
-
-      return;
-    }
-
-    let basePoints = 0;
-
-    if (event === "good") {
-      streak += 1;
-      basePoints = gameConfig.goodTargetBasePoints;
-    } else if (event === "bonus") {
-      streak += 1;
-      basePoints = gameConfig.bonusTargetPoints;
-    } else if (event === "multi") {
-      streak += 2;
-      basePoints = gameConfig.multiTargetPoints;
-    } else {
-      return;
-    }
-
-    let delta = getScoredHitPoints(basePoints, streak);
-
-    if (doubleActiveHits > 0) {
-      delta *= 2;
-      doubleActiveHits -= 1;
-    }
-
-    score += delta;
-  });
-
-  return Math.max(0, Math.round(score));
-}
-
 function buildCsv(entries) {
   const header = ["id", "game", "name", "email", "phone", "score", "playedAt", "createdAt"];
   const rows = entries.map((entry) => [
@@ -706,7 +607,7 @@ function getDefaultRoute() {
   const paths = KIOSK_CONFIG.kiosk.paths || DEFAULT_KIOSK_CONFIG.kiosk.paths;
 
   if (KIOSK_CONFIG.kiosk.defaultPath) {
-    return normalizeRoute(KIOSK_CONFIG.kiosk.defaultPath, "/index.html");
+    return normalizeRoute(KIOSK_CONFIG.kiosk.defaultPath, "/select.html");
   }
 
   if (KIOSK_CONFIG.kiosk.defaultGame === "selector") {
@@ -717,7 +618,7 @@ function getDefaultRoute() {
     return normalizeRoute(paths.bridgeDuel, "/bridge-duel-standalone.html");
   }
 
-  return "/index.html";
+  return "/select.html";
 }
 
 function sendJson(response, statusCode, payload) {
@@ -795,36 +696,6 @@ function requireAdmin(request, response, config) {
   return true;
 }
 
-function validateRegistration(payload) {
-  const errors = [];
-  const name = String(payload.name || "").trim();
-  const email = String(payload.email || "").trim();
-  const phone = String(payload.phone || "").trim();
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-  if (name.length < 2) {
-    errors.push("Name must be at least 2 characters.");
-  }
-
-  if (!email && !phone) {
-    errors.push("Email or phone is required.");
-  }
-
-  if (email && !emailPattern.test(email)) {
-    errors.push("The email address is invalid.");
-  }
-
-  if (phone && (phone.length < 5 || phone.length > 30)) {
-    errors.push("The phone number must be between 5 and 30 characters.");
-  }
-
-  if (!payload.consent) {
-    errors.push("Consent must be checked.");
-  }
-
-  return errors;
-}
-
 function validateStandaloneEntry(payload = {}) {
   const errors = [];
   if (!payload || typeof payload !== "object") {
@@ -900,7 +771,6 @@ function serveStatic(requestPath, response) {
 async function handleApi(request, response, url) {
   const pathname = url.pathname;
   const config = loadConfig();
-  cleanupExpiredSessions(config);
 
   if (request.method === "GET" && pathname === "/api/config") {
     sendJson(response, 200, publicConfig(config));
@@ -926,205 +796,6 @@ async function handleApi(request, response, url) {
         label: meta.label,
         settings: config[meta.configKey] || {}
       }))
-    });
-    return;
-  }
-
-  if (request.method === "POST" && pathname === "/api/session/start") {
-    const sessionId = crypto.randomUUID();
-    const startedAt = Date.now();
-
-    activeSessions.set(sessionId, {
-      id: sessionId,
-      startedAt,
-      finishedAt: null,
-      usedAt: null,
-      score: 0,
-      stats: null,
-      gameConfig: { ...config.game }
-    });
-
-    sendJson(response, 201, {
-      sessionId,
-      startedAt,
-      expiresAt: startedAt + config.game.maxSessionAgeSeconds * 1000
-    });
-    return;
-  }
-
-  if (request.method === "POST" && pathname === "/api/session/finish") {
-    const payload = await parseJsonBody(request);
-    const session = activeSessions.get(payload.sessionId);
-
-    if (!session) {
-      sendJson(response, 400, {
-        error: "The game session does not exist or has expired."
-      });
-      return;
-    }
-
-    if (session.finishedAt) {
-      sendJson(response, 409, {
-        error: "The game session has already been finished."
-      });
-      return;
-    }
-
-    const score = Number(payload.score);
-    const stats = payload.stats || {};
-    const gameConfig = session.gameConfig || config.game;
-    const elapsedMs = Date.now() - session.startedAt;
-    const timeBonusSeconds = Number(stats.timeBonusSeconds || 0);
-    const minAllowed = Math.max(10000, gameConfig.durationSeconds * 1000 - 2500);
-    const maxAllowed = (gameConfig.durationSeconds + timeBonusSeconds) * 1000 + 20000;
-
-    if (!Number.isInteger(score) || score < 0 || score > config.game.maxAcceptedScore) {
-      sendJson(response, 400, {
-        error: "The score was rejected."
-      });
-      return;
-    }
-
-    if (elapsedMs < minAllowed || elapsedMs > maxAllowed) {
-      sendJson(response, 400, {
-        error: "The game session was rejected because of an invalid duration."
-      });
-      return;
-    }
-
-    const goodHits = Number(stats.goodHits || 0);
-    const bonusHits = Number(stats.bonusHits || 0);
-    const badHits = Number(stats.badHits || 0);
-    const multiHits = Number(stats.multiHits || 0);
-    const comboBonusAwarded = Number(stats.comboBonusAwarded || 0);
-    const streakBonusAwarded = Number(stats.streakBonusAwarded || 0);
-    const powerBonusAwarded = Number(stats.powerBonusAwarded || 0);
-    const shieldBlocks = Number(stats.shieldBlocks || 0);
-    const bestStreak = Number(stats.bestStreak || 0);
-    const fastestHitMs = stats.fastestHitMs === null ? null : Number(stats.fastestHitMs || 0);
-    const totalReactionMs = Number(stats.totalReactionMs || 0);
-    const reactionSamples = Number(stats.reactionSamples || 0);
-    const events = Array.isArray(stats.events) ? stats.events.slice(0, 500) : [];
-    const expectedScore = Array.isArray(stats.events)
-      ? calculateExpectedScoreFromStats(stats, gameConfig)
-      : goodHits * gameConfig.goodTargetBasePoints +
-        bonusHits * gameConfig.bonusTargetPoints +
-        multiHits * gameConfig.multiTargetPoints +
-        streakBonusAwarded +
-        powerBonusAwarded +
-        comboBonusAwarded -
-        Math.max(0, badHits - shieldBlocks) * gameConfig.badTargetPenalty;
-
-    const scoringEvents = events.filter((event) => ["good", "bonus", "multi", "bad"].includes(event)).length;
-    const reportedHits = goodHits + bonusHits + multiHits + badHits;
-
-    if (
-      events.length > 500 ||
-      scoringEvents !== reportedHits ||
-      bestStreak > (goodHits + bonusHits + multiHits * 2) ||
-      reactionSamples > goodHits + bonusHits + multiHits + Number(stats.timeBonusSeconds || 0) + 20 ||
-      (fastestHitMs !== null && fastestHitMs < 35)
-    ) {
-      sendJson(response, 400, {
-        error: "The game statistics were rejected."
-      });
-      return;
-    }
-
-    if (score !== Math.max(0, Math.round(expectedScore))) {
-      sendJson(response, 400, {
-        error: "The score and game statistics do not match."
-      });
-      return;
-    }
-
-    session.finishedAt = Date.now();
-    session.score = score;
-    session.stats = {
-      goodHits,
-      bonusHits,
-      badHits,
-      multiHits,
-      streakBonusAwarded,
-      comboBonusAwarded,
-      powerBonusAwarded,
-      shieldBlocks,
-      timeBonusSeconds,
-      bestStreak,
-      fastestHitMs,
-      totalReactionMs,
-      reactionSamples,
-      events,
-      elapsedMs
-    };
-
-    const leaderboard = getLeaderboard(readEntries(), 10);
-    const provisionalRank =
-      [...leaderboard, { score }]
-        .sort((left, right) => right.score - left.score)
-        .findIndex((entry) => entry.score === score) + 1;
-    const qualifies =
-      score >= config.game.scoreHighlightThreshold ||
-      provisionalRank <= 10 ||
-      leaderboard.length < 10;
-
-    sendJson(response, 200, {
-      sessionId: session.id,
-      score,
-      qualifies,
-      provisionalRank,
-      leaderboard
-    });
-    return;
-  }
-
-  if (request.method === "POST" && pathname === "/api/register") {
-    const payload = await parseJsonBody(request);
-    const session = activeSessions.get(payload.sessionId);
-
-    if (!session || !session.finishedAt) {
-      sendJson(response, 400, {
-        error: "No valid game session is linked to this registration."
-      });
-      return;
-    }
-
-    if (session.usedAt) {
-      sendJson(response, 409, {
-        error: "This game session has already been registered."
-      });
-      return;
-    }
-
-    const errors = validateRegistration(payload);
-
-    if (errors.length > 0) {
-      sendJson(response, 400, {
-        error: errors.join(" ")
-      });
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const entry = {
-      id: crypto.randomUUID(),
-      name: sanitizeName(payload.name),
-      email: String(payload.email || "").trim().toLowerCase(),
-      phone: String(payload.phone || "").trim(),
-      score: session.score,
-      game: DEFAULT_GAME_ID,
-      playedAt: new Date(session.finishedAt).toISOString(),
-      createdAt: now
-    };
-
-    const entries = readEntries();
-    entries.push(entry);
-    writeEntries(entries);
-
-    session.usedAt = Date.now();
-
-    sendJson(response, 201, {
-      entry
     });
     return;
   }
