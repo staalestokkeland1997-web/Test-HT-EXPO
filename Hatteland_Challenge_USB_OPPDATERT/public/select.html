@@ -473,7 +473,7 @@
       <section class="board">
         <div class="headline">
           <h2>Pick your challenge.</h2>
-          <p id="tagline">Six branded touch games built for the stand. Every round takes about a minute.</p>
+          <p id="tagline">Seven branded touch games built for the stand. Every round takes about a minute.</p>
         </div>
 
         <div class="grid" id="gameGrid">
@@ -583,9 +583,31 @@
             </div>
           </button>
 
-          <button class="card" type="button" data-game="sonar" style="--accent: var(--violet)">
+          <button class="card" type="button" data-game="dive" style="--accent: #5de5c0">
             <div class="card-top">
               <span class="card-index">06</span>
+              <span class="card-tag">One-touch</span>
+            </div>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <ellipse cx="11" cy="12" rx="7" ry="4" />
+              <path d="M18 12h3" />
+              <rect x="8" y="6" width="4" height="3" rx="1" />
+              <circle cx="13" cy="12" r="1.2" />
+              <path d="M4 19c2 1 4 1 6 0M14 19c2 1 4 1 6 0" />
+            </svg>
+            <div>
+              <h3>Deep Dive</h3>
+              <p>Hold to rise, release to sink. Thread the sub through the ravine and grab the pearls.</p>
+            </div>
+            <div class="card-foot">
+              <span class="card-go">Play</span>
+              <span class="card-best" data-best="dive"><em>No score yet</em></span>
+            </div>
+          </button>
+
+          <button class="card" type="button" data-game="sonar" style="--accent: var(--violet)">
+            <div class="card-top">
+              <span class="card-index">07</span>
               <span class="card-tag">Memory</span>
             </div>
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -623,6 +645,7 @@
         var PATHS = {
           stacker: "/container-stacker-standalone.html",
           runner: "/fjord-runner-standalone.html",
+          dive: "/deep-dive-standalone.html",
           rush: "/harbor-rush-standalone.html",
           duel: "/bridge-duel-standalone.html",
           airhockey: "/air-hockey-standalone.html",

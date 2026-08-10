@@ -410,6 +410,15 @@
         font-variant-numeric: tabular-nums;
       }
 
+
+      .rank-teaser {
+        margin: 0;
+        min-height: 20px;
+        font-size: clamp(12px, 1.5vmin, 17px);
+        font-weight: 800;
+        color: var(--gold);
+      }
+
       .board {
         display: grid;
         gap: 6px;
@@ -581,6 +590,7 @@
                 <strong id="finalRecord">0</strong>
               </article>
             </div>
+            <p class="rank-teaser" id="rankTeaser" aria-live="polite"></p>
 
             <form id="registrationForm" class="form" novalidate>
               <input id="nameInput" type="text" maxlength="40" placeholder="Name *" autocomplete="name" />
@@ -636,6 +646,7 @@
           finalScore: document.getElementById("finalScore"),
           finalLevel: document.getElementById("finalLevel"),
           finalRecord: document.getElementById("finalRecord"),
+          rankTeaser: document.getElementById("rankTeaser"),
           startBoard: document.getElementById("startBoard"),
           endBoard: document.getElementById("endBoard"),
           form: document.getElementById("registrationForm"),
@@ -668,6 +679,7 @@
         var nodes = [];
         var state = createState();
         var timers = [];
+        var boardEntries = [];
         var inputTimer = null;
 
         function createState() {
@@ -845,6 +857,7 @@
           ui.endOverlay.classList.add("hidden");
           ui.pauseOverlay.classList.add("hidden");
           ui.message.textContent = "";
+          ui.rankTeaser.textContent = "";
           ui.form.classList.add("hidden");
           updateHud();
           nextLevel();
@@ -868,6 +881,8 @@
           ui.finalScore.textContent = String(state.score);
           ui.finalLevel.textContent = String(state.level);
           ui.finalRecord.textContent = String(Math.max(record, state.score));
+          state.lastFinalScore = Math.min(99999, state.score);
+          updateRankTeaser(state.lastFinalScore);
 
           ui.form.classList.remove("hidden");
           ui.saveButton.disabled = false;
@@ -938,6 +953,24 @@
           }
         }
 
+
+        // "Du ville tatt X. plass" - konkret grunn til aa lagre scoren.
+        function updateRankTeaser(finalScore) {
+          if (!ui.rankTeaser) return;
+          if (!boardEntries.length) {
+            ui.rankTeaser.textContent = "The board is empty. Save it and take #1.";
+            return;
+          }
+          var rank = boardEntries.filter(function (entry) {
+            return Number(entry.score || 0) >= finalScore;
+          }).length + 1;
+          if (rank <= 10) {
+            ui.rankTeaser.textContent = "That takes #" + rank + " on the board. Save it!";
+          } else {
+            ui.rankTeaser.textContent = "";
+          }
+        }
+
         function renderBoard(list, entries) {
           list.innerHTML = "";
 
@@ -967,8 +1000,12 @@
             })
             .then(function (payload) {
               if (!payload) return;
-              renderBoard(ui.startBoard, payload.entries);
-              renderBoard(ui.endBoard, payload.entries);
+              boardEntries = payload.entries || [];
+              renderBoard(ui.startBoard, boardEntries);
+              renderBoard(ui.endBoard, boardEntries);
+              if (state && state.over && state.lastFinalScore !== undefined) {
+                updateRankTeaser(state.lastFinalScore);
+              }
             })
             .catch(function () {
               /* offline */
@@ -1029,8 +1066,9 @@
                 ui.saveButton.textContent = "Save score";
                 return;
               }
-              renderBoard(ui.endBoard, result.payload.leaderboard);
-              renderBoard(ui.startBoard, result.payload.leaderboard);
+              boardEntries = result.payload.leaderboard || [];
+              renderBoard(ui.endBoard, boardEntries);
+              renderBoard(ui.startBoard, boardEntries);
               ui.message.textContent = "Saved to the Sonar Sequence board.";
               ui.saveButton.textContent = "Saved";
             })

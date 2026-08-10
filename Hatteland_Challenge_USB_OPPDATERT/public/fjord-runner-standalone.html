@@ -443,6 +443,15 @@
         color: var(--gold);
       }
 
+
+      .rank-teaser {
+        margin: 0;
+        min-height: 20px;
+        font-size: clamp(12px, 1.5vmin, 17px);
+        font-weight: 800;
+        color: var(--gold);
+      }
+
       .board {
         display: grid;
         gap: 6px;
@@ -659,6 +668,7 @@
                 <strong id="finalRecord">0</strong>
               </article>
             </div>
+            <p class="rank-teaser" id="rankTeaser" aria-live="polite"></p>
 
             <form id="registrationForm" class="form" novalidate>
               <input id="nameInput" type="text" maxlength="40" placeholder="Name *" autocomplete="name" />
@@ -721,6 +731,7 @@
           finalCargo: document.getElementById("finalCargo"),
           finalStreak: document.getElementById("finalStreak"),
           finalRecord: document.getElementById("finalRecord"),
+          rankTeaser: document.getElementById("rankTeaser"),
           startBoard: document.getElementById("startBoard"),
           endBoard: document.getElementById("endBoard"),
           form: document.getElementById("registrationForm"),
@@ -788,6 +799,7 @@
         var HOLD_EXIT_MS = 1200;
         var idleTimer = null;
         var IDLE_RESET_MS = 90000;
+        var boardEntries = [];
         var gesture = null;
 
         function percent(value) {
@@ -887,6 +899,8 @@
             shake: 0,
             flash: 0,
             damageFlash: 0,
+            recordScore: getRecord(),
+            recordAnnounced: false,
             elapsed: 0
           };
         }
@@ -1131,6 +1145,22 @@
               }
             }
 
+            // Naer-miss: hindringen passerte i nabolopet - liten bonus og
+            // en synlig bekreftelse paa at du saa vidt klarte deg.
+            if (
+              entity.kind === "obstacle" &&
+              !entity.hit &&
+              !entity.rewarded &&
+              entity.z < BOAT_Z - 0.9
+            ) {
+              entity.rewarded = true;
+              var passDistance = Math.abs(entity.lane - boatLaneExact);
+              if (passDistance >= 0.45 && passDistance < 1.05) {
+                state.score += 5;
+                addPop("+5 CLOSE", subPopX(), projection(BOAT_Z).y - 60, "#4fe3ff");
+              }
+            }
+
             return entity.z > -3;
           });
 
@@ -1157,7 +1187,19 @@
 
           var scorePoints = Math.floor(state.distance / 100) * Number(settings.distancePointsPer100m || 10);
           state.displayScore = state.score + scorePoints;
+
+          // Rekordtempo midt i runden - den sterkeste grunnen til aa holde ut.
+          if (state.recordScore > 0 && !state.recordAnnounced && state.displayScore > state.recordScore) {
+            state.recordAnnounced = true;
+            state.flash = Math.max(state.flash, 0.5);
+            showBanner("NEW RECORD PACE", "#f5c84b");
+          }
+
           updateHud();
+        }
+
+        function subPopX() {
+          return laneScreenX(LANES[state.lane], projection(BOAT_Z).p);
         }
 
         function renderLives() {
@@ -1620,6 +1662,7 @@
           ui.endOverlay.classList.add("hidden");
           ui.pauseOverlay.classList.add("hidden");
           ui.message.textContent = "";
+          ui.rankTeaser.textContent = "";
           ui.form.classList.add("hidden");
           resizeCanvas();
           renderLives();
@@ -1659,6 +1702,8 @@
           ui.finalCargo.textContent = String(state.cargo);
           ui.finalStreak.textContent = String(state.bestStreak);
           ui.finalRecord.textContent = String(Math.max(record, finalScore));
+          state.lastFinalScore = finalScore;
+          updateRankTeaser(state.lastFinalScore);
 
           ui.form.classList.remove("hidden");
           ui.saveButton.disabled = false;
@@ -1733,6 +1778,24 @@
           }
         }
 
+
+        // "Du ville tatt X. plass" - konkret grunn til aa lagre scoren.
+        function updateRankTeaser(finalScore) {
+          if (!ui.rankTeaser) return;
+          if (!boardEntries.length) {
+            ui.rankTeaser.textContent = "The board is empty. Save it and take #1.";
+            return;
+          }
+          var rank = boardEntries.filter(function (entry) {
+            return Number(entry.score || 0) >= finalScore;
+          }).length + 1;
+          if (rank <= 10) {
+            ui.rankTeaser.textContent = "That takes #" + rank + " on the board. Save it!";
+          } else {
+            ui.rankTeaser.textContent = "";
+          }
+        }
+
         function renderBoard(list, entries) {
           list.innerHTML = "";
 
@@ -1762,8 +1825,12 @@
             })
             .then(function (payload) {
               if (!payload) return;
-              renderBoard(ui.startBoard, payload.entries);
-              renderBoard(ui.endBoard, payload.entries);
+              boardEntries = payload.entries || [];
+              renderBoard(ui.startBoard, boardEntries);
+              renderBoard(ui.endBoard, boardEntries);
+              if (state && state.over && state.lastFinalScore !== undefined) {
+                updateRankTeaser(state.lastFinalScore);
+              }
             })
             .catch(function () {
               /* offline */
@@ -1824,8 +1891,9 @@
                 ui.saveButton.textContent = "Save score";
                 return;
               }
-              renderBoard(ui.endBoard, result.payload.leaderboard);
-              renderBoard(ui.startBoard, result.payload.leaderboard);
+              boardEntries = result.payload.leaderboard || [];
+              renderBoard(ui.endBoard, boardEntries);
+              renderBoard(ui.startBoard, boardEntries);
               ui.message.textContent = "Saved to the Fjord Runner board.";
               ui.saveButton.textContent = "Saved";
             })

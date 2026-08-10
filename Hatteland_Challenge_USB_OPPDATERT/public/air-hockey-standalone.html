@@ -168,6 +168,23 @@
       font-variant-numeric: tabular-nums;
     }
 
+    /* Siste 10 sekunder: klokka pulserer rodt for aa dra opp intensiteten. */
+    .stat--critical strong {
+      color: var(--red) !important;
+      text-shadow: 0 0 18px rgba(255, 93, 108, 0.6);
+      animation: criticalPulse 500ms ease-in-out infinite;
+    }
+
+    @keyframes criticalPulse {
+      0%,
+      100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.18);
+      }
+    }
+
     .stat--blue strong {
       color: var(--blue);
       text-shadow: 0 0 18px rgba(79, 227, 255, 0.42);
@@ -982,6 +999,7 @@
           trail: [],
           shake: 0,
           flash: 0,
+          finalWarned: false,
           puck: { x: 0, y: 0, vx: 0, vy: 0, r: 18 },
           left: { x: 0, y: 0, px: 0, py: 0, r: paddleRadius(), active: false },
           right: { x: 0, y: 0, px: 0, py: 0, r: paddleRadius(), active: false },
@@ -1035,6 +1053,16 @@
         ui.comboLeft.textContent = `x${state.combo.left}`;
         ui.comboRight.textContent = `x${state.combo.right}`;
         ui.timeLeft.textContent = String(Math.max(0, Math.ceil(state.secondsLeft)));
+
+        // Sluttspurt: pulserende rod klokke + varsel forste gang.
+        var critical = state.running && state.secondsLeft <= 10 && state.secondsLeft > 0;
+        ui.timeLeft.parentElement.classList.toggle("stat--critical", critical);
+        if (critical && !state.finalWarned) {
+          state.finalWarned = true;
+          state.flash = Math.max(state.flash, 0.5);
+          showEvent("FINAL 10 SECONDS", state.score.left >= state.score.right ? "left" : "right");
+        }
+
         ui.powerHud.textContent = state.activePower
           ? `${state.activePower.label} ${Math.ceil(state.activePower.time)}s`
           : "None";

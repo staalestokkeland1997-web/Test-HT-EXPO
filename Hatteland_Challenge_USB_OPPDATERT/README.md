@@ -4,12 +4,13 @@ Dette er en lokal kiosk-app for messebruk. Den kjorer paa en PC med Node.js, ute
 
 ## Innhold
 
-Seks touchspill med maritimt preg, alle med egen highscoreliste:
+Sju touchspill med maritimt preg, alle med egen highscoreliste:
 
 | Spill | Type | Fil |
 | --- | --- | --- |
 | Container Stacker | Presisjon, 1 spiller | `/container-stacker-standalone.html` |
 | Fjord Runner | Endless runner, 1 spiller | `/fjord-runner-standalone.html` |
+| Deep Dive | One-touch, 1 spiller | `/deep-dive-standalone.html` |
 | Harbor Rush | Refleks, 1 spiller | `/harbor-rush-standalone.html` |
 | Bridge Duel | 1 mot 1 | `/bridge-duel-standalone.html` |
 | HT Air Hockey | 1 mot 1 | `/air-hockey-standalone.html` |
@@ -50,8 +51,8 @@ beholder reglene runden startet med.
 
 Lyd er slaatt av som standard i hele kiosken fordi den uansett drukner i
 stoyen paa en messe. Harbor Rush har en lydknapp for den som vil ha den paa,
-og standardvalget styres av `game.soundDefaultEnabled` og `sonarGame.enableSound`
-i `config/contest-config.json`.
+styrt av `game.soundDefaultEnabled` i `config/contest-config.json`.
+De andre spillene har ingen lyd i det hele tatt.
 
 ## Start
 
@@ -68,6 +69,7 @@ npm start          # bare server (bruker config/kiosk-config.json)
 npm run launch     # server + nettleser med spillvelger
 npm run stacker    # start rett i Container Stacker
 npm run runner     # start rett i Fjord Runner
+npm run dive       # start rett i Deep Dive
 npm run rush       # start rett i Harbor Rush
 npm run duel       # start rett i Bridge Duel 1v1
 npm run airhockey  # start rett i HT Air Hockey
@@ -91,6 +93,7 @@ http://127.0.0.1:3000/admin-rush.html
 http://127.0.0.1:3000/admin-duel.html
 http://127.0.0.1:3000/container-stacker-standalone.html
 http://127.0.0.1:3000/fjord-runner-standalone.html
+http://127.0.0.1:3000/deep-dive-standalone.html
 http://127.0.0.1:3000/harbor-rush-standalone.html
 http://127.0.0.1:3000/bridge-duel-standalone.html
 http://127.0.0.1:3000/air-hockey-standalone.html
@@ -144,6 +147,7 @@ Viktige seksjoner i `contest-config.json`:
 - `airHockeyGame`: HT Air Hockey settings (rundetid, vinnerscore, fart).
 - `stackerGame`: Container Stacker settings (kranfart, bredde, perfekt-vindu).
 - `runnerGame`: Fjord Runner settings (fart, hindringer, last, antall skrog).
+- `diveGame`: Deep Dive settings (fart, gap, loft, perler, miner).
 - `sonarGame`: Sonar Sequence settings (antall kontakter, tempo, svartid).
 - `brand`: navn, logo, premie og lenker.
 - `admin.password`: passord for adminsidene.
@@ -179,6 +183,7 @@ Slik gjor du:
    - `START_HT_GAME_KIOSK.bat` (spillvelger, kiosk/fullskjerm)
    - `START_CONTAINER_STACKER.bat`
    - `START_FJORD_RUNNER.bat`
+   - `START_DEEP_DIVE.bat`
    - `START_HARBOR_RUSH.bat`
    - `START_1V1.bat`
    - `START_AIR_HOCKEY.bat`
@@ -218,6 +223,7 @@ public/
   select.html                       (kioskens forside)
   container-stacker-standalone.html
   fjord-runner-standalone.html
+  deep-dive-standalone.html
   harbor-rush-standalone.html
   bridge-duel-standalone.html
   air-hockey-standalone.html
@@ -236,6 +242,7 @@ server.js
 START_HT_GAME_KIOSK.bat   (spillvelger, kiosk)
 START_CONTAINER_STACKER.bat
 START_FJORD_RUNNER.bat
+START_DEEP_DIVE.bat
 START_HARBOR_RUSH.bat
 START_1V1.bat
 START_AIR_HOCKEY.bat
