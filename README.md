@@ -173,6 +173,14 @@ Viktige seksjoner i `contest-config.json`:
   EU-datasett) tegnes over sjokartet - viser hvor trafikken faktisk gaar.
   Ocean-basemappet har i tillegg faatt Esris referanselag (sjonavn og
   dybdelabels) oppaa flisene.
+- HT Radar (`/ecdis/radar.html?kiosk=1`): egen fullskjerms PPI-radarside med
+  roterende sveip og etterglod, avstandsringer, peilering, kurslinje,
+  N-UP/H-UP, range 0,75-24 nm, EBL/VRM (dra paa skopet), trails, AIS-ekko
+  med vektorer og navn, gain/sea/rain-clutter og landekko fra kystlinjen.
+  Radaren folger SAMME seilas som ECDIS: den leser samme lagrede tilstand
+  og dodregner likt, og naar ECDIS er aapen samtidig overtar dens direkte-
+  sendte posisjon og AIS-maal (BroadcastChannel). Knapper kobler ECDIS <->
+  Radar <-> kiosk. `npm run radar` / START_RADAR.bat starter rett i radaren.
 - HT ECDIS husker seg selv mellom omstarter: skipets posisjon, kurs, rute,
   kartlag, palett og basemap lagres hvert 5. sekund (localStorage + server i
   `data/ecdis-state.json`). Ved neste oppstart dodregnes skipet frem langs
