@@ -667,6 +667,6 @@ class Component extends DCLogic {
   }
 }
 </script>
-<a href="/select.html" style="position:fixed;left:14px;bottom:14px;z-index:99999;padding:11px 16px;border-radius:12px;background:rgba(255,255,255,0.92);color:#1c1c1e;border:0.5px solid rgba(60,60,67,0.2);font:700 11px/1 'Inter',system-ui,sans-serif;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;box-shadow:0 8px 24px rgba(0,0,0,0.18);backdrop-filter:blur(10px);">Main kiosk</a>
+<a href="/select.html" onpointerup="if(!event.isPrimary){event.preventDefault();window.location.href=this.href;}" style="position:fixed;left:14px;bottom:14px;z-index:99999;min-height:46px;display:inline-grid;place-items:center;padding:0 20px;border-radius:12px;background:rgba(255,255,255,0.92);color:#1c1c1e;border:0.5px solid rgba(60,60,67,0.2);font:700 11px/1 'Inter',system-ui,sans-serif;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;box-shadow:0 8px 24px rgba(0,0,0,0.18);backdrop-filter:blur(10px);-webkit-tap-highlight-color:transparent;">Main kiosk</a>
 </body>
 </html>

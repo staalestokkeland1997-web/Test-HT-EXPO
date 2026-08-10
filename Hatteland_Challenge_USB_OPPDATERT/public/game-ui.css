@@ -256,7 +256,7 @@ button {
 }
 
 .nav-button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 14px;
   display: inline-grid;
   place-items: center;
@@ -640,7 +640,7 @@ body.game-running .hold-exit {
    slik at gamle klassenavn faar samme uttrykk som resten av kiosken. ---------- */
 
 .kiosk-nav-button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 14px;
   display: inline-grid;
   place-items: center;
