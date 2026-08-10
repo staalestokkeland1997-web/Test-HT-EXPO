@@ -4,46 +4,32 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>HT Air Hockey</title>
+  <link rel="stylesheet" href="game-ui.css" />
   <style>
     :root {
-      --bg: #02070d;
-      --panel: rgba(4, 15, 25, 0.86);
-      --line: rgba(144, 224, 239, 0.24);
-      --text: #f4fbff;
-      --muted: #a9c4d1;
-      --blue: #4fe3ff;
-      --gold: #f5c84b;
-      --red: #ff5d6c;
-      --green: #68f2a6;
+      --game-accent: var(--green);
+      --game-accent-strong: #2fbf7a;
+      --game-on-accent: #052012;
     }
 
-    * {
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
+    /* Poengfarger og maal-puls */
+    .stat--blue strong {
+      color: var(--blue);
     }
 
-    html,
-    body {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      overflow: hidden;
-      background:
-        radial-gradient(circle at 22% 18%, rgba(79, 227, 255, 0.14), transparent 29rem),
-        radial-gradient(circle at 78% 82%, rgba(245, 200, 75, 0.13), transparent 30rem),
-        linear-gradient(135deg, #03101a, #02070d 68%);
-      color: var(--text);
-      font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
-      touch-action: none;
-      user-select: none;
+    .stat--gold strong {
+      color: var(--gold);
     }
 
-    button {
-      border: 0;
-      font: inherit;
-      cursor: pointer;
+    .stat.scored strong {
+      animation: scorePulse 460ms ease both;
     }
 
+    /* Bordet ligger med litt luft rundt seg */
+    .app {
+      padding: 10px;
+      gap: 10px;
+    }
     .app {
       width: 100%;
       height: 100%;
@@ -53,186 +39,7 @@
       gap: 10px;
     }
 
-    .topbar {
-      min-height: 78px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-      padding: 12px 16px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.018)),
-        rgba(3, 13, 22, 0.82);
-      box-shadow: 0 18px 52px rgba(0, 0, 0, 0.28);
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 13px;
-      min-width: 0;
-    }
-
-    .brand-mark {
-      width: 54px;
-      height: 54px;
-      display: grid;
-      place-items: center;
-      border-radius: 12px;
-      background: white;
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
-    }
-
-    .brand-mark img {
-      max-width: 82%;
-      max-height: 82%;
-      object-fit: contain;
-    }
-
-    .eyebrow,
-    .stat span {
-      margin: 0;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 900;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-    }
-
-    h1 {
-      margin: 3px 0 0;
-      font-size: clamp(24px, 3vw, 42px);
-      line-height: 0.98;
-      letter-spacing: 0;
-    }
-
-    .stats,
-    .scoreboard {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .scoreboard {
-      min-height: 58px;
-      padding: 6px;
-      border: 1px solid rgba(255,255,255,0.14);
-      border-radius: 12px;
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.018)),
-        rgba(3, 13, 22, 0.78);
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.12),
-        0 16px 42px rgba(0, 0, 0, 0.3);
-    }
-
-    .stat,
-    .control-button,
-    .kiosk-back {
-      min-height: 48px;
-      display: grid;
-      place-items: center;
-      border: 1px solid rgba(255,255,255,0.14);
-      border-radius: 10px;
-      background: rgba(3, 13, 22, 0.72);
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
-    }
-
-    .stat {
-      min-width: 92px;
-      padding: 8px 12px;
-      text-align: center;
-    }
-
-    .score-stat {
-      min-width: 132px;
-      grid-template-columns: 1fr;
-      border-color: rgba(255,255,255,0.18);
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.016)),
-        rgba(3, 13, 22, 0.9);
-    }
-
-    .stat strong {
-      display: block;
-      margin-top: 2px;
-      font-size: 24px;
-      line-height: 1;
-    }
-
-    .score-stat strong {
-      font-size: clamp(34px, 4vw, 54px);
-      line-height: 0.9;
-      font-variant-numeric: tabular-nums;
-    }
-
     /* Siste 10 sekunder: klokka pulserer rodt for aa dra opp intensiteten. */
-    .stat--critical strong {
-      color: var(--red) !important;
-      text-shadow: 0 0 18px rgba(255, 93, 108, 0.6);
-      animation: criticalPulse 500ms ease-in-out infinite;
-    }
-
-    @keyframes criticalPulse {
-      0%,
-      100% {
-        transform: scale(1);
-      }
-      50% {
-        transform: scale(1.18);
-      }
-    }
-
-    .stat--blue strong {
-      color: var(--blue);
-      text-shadow: 0 0 18px rgba(79, 227, 255, 0.42);
-    }
-
-    .stat--blue {
-      box-shadow:
-        inset 4px 0 0 rgba(79, 227, 255, 0.78),
-        0 12px 30px rgba(0, 0, 0, 0.24);
-    }
-
-    .score-stat.scored {
-      animation: scorePulse 460ms ease both;
-    }
-
-    .stat--gold strong {
-      color: var(--gold);
-      text-shadow: 0 0 18px rgba(245, 200, 75, 0.42);
-    }
-
-    .stat--gold {
-      box-shadow:
-        inset -4px 0 0 rgba(245, 200, 75, 0.78),
-        0 12px 30px rgba(0, 0, 0, 0.24);
-    }
-
-    .score-vs {
-      min-width: 52px;
-      color: rgba(244, 251, 255, 0.82);
-      font-size: 14px;
-      font-weight: 950;
-      letter-spacing: 0.12em;
-      text-align: center;
-      text-transform: uppercase;
-      text-shadow: 0 0 14px rgba(255,255,255,0.18);
-    }
-
-    .control-button,
-    .kiosk-back {
-      padding: 0 16px;
-      color: white;
-      font-size: 12px;
-      font-weight: 950;
-      letter-spacing: 0.09em;
-      text-decoration: none;
-      text-transform: uppercase;
-    }
-
     .table-wrap {
       position: relative;
       min-height: 0;
@@ -458,135 +265,12 @@
       color: var(--gold);
     }
 
-    .overlay {
-      position: absolute;
-      inset: 0;
-      z-index: 5;
-      display: grid;
-      place-items: center;
-      padding: 18px;
-      background:
-        linear-gradient(90deg, rgba(79, 227, 255, 0.08), transparent 28%, transparent 72%, rgba(245, 200, 75, 0.08)),
-        rgba(2, 8, 14, 0.82);
-      backdrop-filter: blur(8px);
-    }
-
-    .overlay.hidden {
-      display: none;
-    }
-
-    .kiosk-back {
-      position: absolute;
-      right: 18px;
-      top: 18px;
-      z-index: 6;
-    }
-
-    .kiosk-nav {
-      position: fixed;
-      right: 14px;
-      top: 14px;
-      z-index: 30;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      padding: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      border-radius: 12px;
-      background: rgba(3, 13, 22, 0.78);
-      box-shadow: 0 16px 42px rgba(0, 0, 0, 0.34);
-      backdrop-filter: blur(10px);
-    }
-
-    .kiosk-nav-button {
-      min-height: 42px;
-      display: inline-grid;
-      place-items: center;
-      padding: 0 14px;
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      border-radius: 9px;
-      background: rgba(255, 255, 255, 0.06);
-      color: white;
-      font-size: 12px;
-      font-weight: 950;
-      letter-spacing: 0.08em;
-      text-decoration: none;
-      text-transform: uppercase;
-    }
-
-    .kiosk-nav-button--exit {
-      border-color: rgba(255, 93, 108, 0.34);
-      color: #ffdce1;
-    }
-
     /* Skjul kiosk-navigasjonen under aktiv kamp saa et feiltrykk ikke
        avbryter spillet - pause viser den igjen. */
-    body.game-running .kiosk-nav {
-      display: none;
-    }
-
-    .front-page {
-      width: min(1120px, calc(100% - 34px));
-      max-height: calc(100% - 24px);
-      display: grid;
-      grid-template-columns: minmax(390px, 0.92fr) minmax(390px, 1.08fr);
-      gap: 18px;
-      overflow: hidden;
-    }
-
     .front-copy,
     .front-preview,
-    .end-card {
-      min-height: 0;
-      border: 1px solid rgba(144, 224, 239, 0.22);
-      border-radius: 14px;
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.065), rgba(255,255,255,0.018)),
-        rgba(5, 20, 32, 0.94);
-      box-shadow: 0 26px 86px rgba(0, 0, 0, 0.4);
-    }
-
-    .front-copy {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: clamp(22px, 2.4vw, 34px);
-    }
-
-    .front-brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 18px;
-    }
-
-    .front-brand img {
-      width: 58px;
-      height: 58px;
-      padding: 8px;
-      border-radius: 13px;
-      background: white;
-      object-fit: contain;
-    }
-
     .front-brand span,
     .front-kicker,
-    .front-proof {
-      display: block;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 950;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-    }
-
-    .front-brand strong {
-      display: block;
-      margin-top: 3px;
-      color: white;
-      font-size: 18px;
-    }
-
     .front-copy h2 {
       margin: 10px 0 14px;
       font-size: clamp(42px, 6vw, 88px);
@@ -594,144 +278,10 @@
       letter-spacing: 0;
     }
 
-    .front-lede {
-      margin: 0 0 18px;
-      color: #c4dce6;
-      font-size: clamp(16px, 1.5vw, 21px);
-      line-height: 1.45;
-    }
-
-    .front-actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-top: 8px;
-    }
-
-    .start-button {
-      min-width: 240px;
-      min-height: 68px;
-      padding: 0 28px;
-      border-radius: 14px;
-      background:
-        linear-gradient(135deg, rgba(255,255,255,0.28), transparent 30%),
-        linear-gradient(135deg, var(--gold), #ffe69a);
-      color: #08111a;
-      font-size: 16px;
-      font-weight: 950;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      box-shadow: 0 18px 42px rgba(245, 200, 75, 0.26);
-    }
-
-    .front-preview {
-      position: relative;
-      overflow: hidden;
-      background:
-        radial-gradient(circle at 50% 50%, rgba(245, 200, 75, 0.18), transparent 20%),
-        linear-gradient(90deg, rgba(79, 227, 255, 0.14), transparent 46%, rgba(245, 200, 75, 0.14)),
-        rgba(5, 20, 32, 0.94);
-    }
-
     .preview-line,
     .preview-center,
     .preview-goal,
     .preview-puck,
-    .preview-paddle {
-      position: absolute;
-      pointer-events: none;
-    }
-
-    .preview-line {
-      left: 50%;
-      top: 9%;
-      bottom: 9%;
-      width: 2px;
-      background: rgba(255,255,255,0.18);
-      transform: translateX(-50%);
-    }
-
-    .preview-center {
-      left: 50%;
-      top: 50%;
-      width: min(34vw, 280px);
-      aspect-ratio: 1;
-      border: 2px solid rgba(255,255,255,0.16);
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-    }
-
-    .preview-goal {
-      top: 35%;
-      width: 12px;
-      height: 30%;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.18);
-    }
-
-    .preview-goal.left {
-      left: 0;
-      box-shadow: 0 0 38px rgba(79, 227, 255, 0.36);
-    }
-
-    .preview-goal.right {
-      right: 0;
-      box-shadow: 0 0 38px rgba(245, 200, 75, 0.34);
-    }
-
-    .preview-paddle {
-      width: 92px;
-      height: 92px;
-      border-radius: 50%;
-      background:
-        radial-gradient(circle at 36% 30%, rgba(255,255,255,0.65), transparent 17%),
-        linear-gradient(135deg, var(--blue), #0c9ec4);
-      box-shadow: 0 0 40px rgba(79, 227, 255, 0.34);
-    }
-
-    .preview-paddle.left {
-      left: 19%;
-      top: 38%;
-    }
-
-    .preview-paddle.right {
-      right: 17%;
-      top: 48%;
-      background:
-        radial-gradient(circle at 36% 30%, rgba(255,255,255,0.68), transparent 17%),
-        linear-gradient(135deg, var(--gold), #d99712);
-      box-shadow: 0 0 40px rgba(245, 200, 75, 0.32);
-    }
-
-    .preview-puck {
-      left: 48%;
-      top: 41%;
-      width: 42px;
-      height: 42px;
-      border-radius: 50%;
-      background: #f6fbff;
-      box-shadow: 0 0 30px rgba(255,255,255,0.32);
-      animation: puckDrift 2.4s ease-in-out infinite;
-    }
-
-    .end-card {
-      width: min(720px, 92vw);
-      padding: 28px;
-      text-align: center;
-    }
-
-    .end-card h2 {
-      margin: 0;
-      font-size: clamp(42px, 7vw, 90px);
-      line-height: 0.94;
-    }
-
-    .end-card p {
-      color: var(--muted);
-      font-size: 18px;
-    }
-
     @keyframes puckDrift {
       0%,
       100% { transform: translate(-120px, 50px); }
@@ -756,109 +306,47 @@
         padding: 8px;
       }
 
-      .topbar {
-        min-height: 68px;
-        padding: 10px;
-      }
-
-      .brand-mark {
-        width: 44px;
-        height: 44px;
-      }
-
-      .stats {
-        gap: 6px;
-      }
-
-      .scoreboard {
-        gap: 5px;
-        padding: 4px;
-      }
-
-      .stat {
-        min-width: 70px;
-        min-height: 42px;
-        padding: 6px 8px;
-      }
-
-      .score-stat {
-        min-width: 86px;
-      }
-
-      .stat strong {
-        font-size: 20px;
-      }
-
-      .score-stat strong {
-        font-size: 30px;
-      }
-
-      .score-vs {
-        min-width: 34px;
-        font-size: 11px;
-      }
-
       .power-hud {
         display: none;
-      }
-
-      .control-button {
-        min-height: 42px;
-        padding: 0 10px;
-      }
-
-      .front-page {
-        grid-template-columns: 1fr;
-        width: min(680px, calc(100% - 24px));
-      }
-
-      .front-preview {
-        min-height: 230px;
       }
     }
   </style>
 </head>
 <body>
   <main class="app">
-    <nav class="kiosk-nav" aria-label="Kiosk navigation">
+    <nav class="kiosk-nav kiosk-nav--floating" aria-label="Kiosk navigation">
       <a class="kiosk-nav-button" href="/select.html">Main kiosk</a>
       <button id="exitGameButton" class="kiosk-nav-button kiosk-nav-button--exit" type="button">Exit game</button>
     </nav>
     <header class="topbar">
       <div class="brand">
-        <div class="brand-mark">
-          <img src="assets/image.png" alt="Hatteland Technology logo" />
-        </div>
-        <div>
+        <span class="brand-mark"><img src="assets/image.png" alt="Hatteland Technology logo" /></span>
+        <div class="brand-text">
           <p class="eyebrow">Hatteland Technology</p>
           <h1>HT Air Hockey</h1>
         </div>
       </div>
-      <div class="stats">
-        <div class="scoreboard" aria-label="Scoreboard">
-          <article class="stat score-stat stat--blue">
-            <span>Blue</span>
-            <strong id="scoreLeft">0</strong>
-          </article>
-          <div class="score-vs">VS</div>
-          <article class="stat score-stat stat--gold">
-            <span>Gold</span>
-            <strong id="scoreRight">0</strong>
-          </article>
+      <div class="hud">
+        <div class="stat stat--blue">
+          <span>Blue</span>
+          <strong id="scoreLeft">0</strong>
         </div>
-        <article class="stat">
+        <div class="stat">
           <span>Blue combo</span>
           <strong id="comboLeft">x1</strong>
-        </article>
-        <article class="stat">
+        </div>
+        <div class="stat">
           <span>Time</span>
           <strong id="timeLeft">60</strong>
-        </article>
-        <article class="stat">
+        </div>
+        <div class="stat">
           <span>Gold combo</span>
           <strong id="comboRight">x1</strong>
-        </article>
-        <button id="pauseButton" class="control-button" type="button">Pause</button>
+        </div>
+        <div class="stat stat--gold">
+          <span>Gold</span>
+          <strong id="scoreRight">0</strong>
+        </div>
       </div>
     </header>
 
@@ -879,45 +367,50 @@
       </div>
 
       <div id="startOverlay" class="overlay">
-        <section class="front-page" aria-label="HT Air Hockey start screen">
-          <div class="front-copy">
-            <div class="front-brand">
-              <img src="assets/image.png" alt="Hatteland Technology logo" />
-              <div>
-                <span>Hatteland Technology</span>
-                <strong>Branded arcade challenge</strong>
-              </div>
-            </div>
-            <p class="front-kicker">HT Air Hockey</p>
-            <h2>Fast hands. Clean hits.</h2>
-            <p class="front-lede">
-              A touchscreen air hockey game for the kiosk. Blue controls the left harbor,
-              gold controls the right harbor, and the puck rewards sharp reactions.
-            </p>
-            <div class="front-actions">
-              <button id="startButton" class="start-button" type="button">Start Match</button>
-            </div>
-            <p class="front-proof">Powered by Hatteland Technology - Precision under pressure</p>
+        <div class="panel">
+          <p class="eyebrow">Arcade challenge</p>
+          <h2>Fast hands. Clean hits.</h2>
+          <p>
+            Blue controls the left harbor, gold controls the right. First to the win score takes
+            the match &mdash; or the highest score when the clock runs out.
+          </p>
+          <div class="steps">
+            <article class="step">
+              <b>Drag your paddle</b>
+              <small>Keep a finger on your half. The paddle follows it.</small>
+            </article>
+            <article class="step">
+              <b>Hit hard</b>
+              <small>Fast strikes build combos and light up the table.</small>
+            </article>
+            <article class="step">
+              <b>Grab power-ups</b>
+              <small>Turbo puck, wide paddle and flash goals that count double.</small>
+            </article>
           </div>
+          <button id="startButton" class="primary" type="button">Start match</button>
+        </div>
+      </div>
 
-          <div class="front-preview" aria-hidden="true">
-            <span class="preview-line"></span>
-            <span class="preview-center"></span>
-            <span class="preview-goal left"></span>
-            <span class="preview-goal right"></span>
-            <span class="preview-paddle left"></span>
-            <span class="preview-paddle right"></span>
-            <span class="preview-puck"></span>
-          </div>
-        </section>
+      <button id="pauseButton" class="pause-button" type="button">Pause</button>
+
+      <div id="pauseOverlay" class="overlay hidden">
+        <div class="panel">
+          <p class="eyebrow">Paused</p>
+          <h2>HT Air Hockey</h2>
+          <button id="resumeButton" class="primary" type="button">Resume</button>
+        </div>
       </div>
 
       <div id="endOverlay" class="overlay hidden">
-        <div class="end-card">
-          <p class="front-kicker">Final score</p>
+        <div class="panel">
+          <p class="eyebrow">Final score</p>
           <h2 id="winnerText">Winner</h2>
           <p id="finalScore">Blue 0 - 0 Gold</p>
-          <button id="restartButton" class="start-button" type="button">Play Again</button>
+          <div class="row">
+            <button id="restartButton" class="primary" type="button">Play again</button>
+            <a class="secondary" href="/select.html">Main kiosk</a>
+          </div>
         </div>
       </div>
     </section>
@@ -941,6 +434,8 @@
         startButton: document.getElementById("startButton"),
         restartButton: document.getElementById("restartButton"),
         pauseButton: document.getElementById("pauseButton"),
+        pauseOverlay: document.getElementById("pauseOverlay"),
+        resumeButton: document.getElementById("resumeButton"),
         exitGameButton: document.getElementById("exitGameButton"),
         winnerText: document.getElementById("winnerText"),
         finalScore: document.getElementById("finalScore")
@@ -1066,7 +561,6 @@
         ui.powerHud.textContent = state.activePower
           ? `${state.activePower.label} ${Math.ceil(state.activePower.time)}s`
           : "None";
-        ui.pauseButton.textContent = state.paused ? "Resume" : "Pause";
       }
 
       function loadSettings() {
@@ -1114,6 +608,7 @@
       function endGame() {
         state.running = false;
         document.body.classList.remove("game-running");
+        ui.pauseOverlay.classList.add("hidden");
         cancelAnimationFrame(animationId);
         const left = state.score.left;
         const right = state.score.right;
@@ -1127,6 +622,7 @@
         if (!state.running) return;
         state.paused = !state.paused;
         document.body.classList.toggle("game-running", !state.paused);
+        ui.pauseOverlay.classList.toggle("hidden", !state.paused);
         lastTime = performance.now();
         updateUI();
         if (!state.paused) {
@@ -1146,6 +642,7 @@
       function exitToStart() {
         cancelAnimationFrame(animationId);
         document.body.classList.remove("game-running");
+        ui.pauseOverlay.classList.add("hidden");
         state = createState();
         resetPositions(true);
         ui.endOverlay.classList.add("hidden");
@@ -1757,6 +1254,7 @@
       bindTap(ui.startButton, startGame);
       bindTap(ui.restartButton, startGame);
       bindTap(ui.pauseButton, togglePause);
+      bindTap(ui.resumeButton, togglePause);
       bindTap(ui.exitGameButton, exitToStart);
       canvas.addEventListener("pointerdown", onPointerDown);
       canvas.addEventListener("pointermove", onPointerMove);
