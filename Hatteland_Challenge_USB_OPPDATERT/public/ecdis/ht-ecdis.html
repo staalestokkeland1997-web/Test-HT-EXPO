@@ -2060,23 +2060,37 @@ class Component extends DCLogic {
 <script>
 // Stedssok via ArcGIS Geocoding: skriv "Bergen" eller et havnenavn og kartet
 // flyr dit. Vises bare naar apiKeys.arcgis er satt i kioskens config.
+// Widgeten er stylet som appens egne piller og legger seg i topplinjen ved
+// merkevare-pillen; paa smale skjermer under den. All input stoppes fra aa
+// naa appens globale pointer-/tastatur-haandtering.
 (function () {
   var key = (window.__kioskKeys || {}).arcgis;
   if (!key) return;
   var wrap = document.createElement("div");
-  wrap.style.cssText = "position:fixed;left:16px;top:72px;z-index:9998;width:262px;font-family:'Inter',system-ui,sans-serif;";
+  wrap.style.cssText = "position:fixed;z-index:9998;width:min(280px,26vw);font-family:'Inter',system-ui,sans-serif;";
+  function place() {
+    if (window.innerWidth >= 1150) { wrap.style.left = "196px"; wrap.style.top = "14px"; wrap.style.width = "min(280px,24vw)"; }
+    else { wrap.style.left = "16px"; wrap.style.top = "70px"; wrap.style.width = "260px"; }
+  }
+  place();
+  window.addEventListener("resize", place);
   var input = document.createElement("input");
   input.type = "search";
   input.placeholder = "Search place or harbor…";
   input.autocomplete = "off";
-  input.style.cssText = "width:100%;min-height:44px;padding:0 14px;border:0.5px solid rgba(60,60,67,0.2);border-radius:12px;background:rgba(255,255,255,0.92);color:#1c1c1e;font-size:13px;font-weight:600;outline:none;box-shadow:0 8px 24px rgba(0,0,0,0.14);backdrop-filter:blur(10px);";
+  input.style.cssText = "width:100%;min-height:44px;padding:0 14px;border:0.5px solid rgba(60,60,67,0.18);border-radius:14px;background:rgba(255,255,255,0.85);color:#1c1c1e;font-family:inherit;font-size:13px;font-weight:600;outline:none;box-shadow:0 8px 24px rgba(0,0,0,0.12);backdrop-filter:blur(14px);";
   var list = document.createElement("div");
-  list.style.cssText = "margin-top:6px;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.2);display:none;";
+  list.style.cssText = "margin-top:6px;border-radius:14px;overflow:hidden;box-shadow:0 14px 36px rgba(0,0,0,0.22);display:none;backdrop-filter:blur(14px);";
   wrap.appendChild(input); wrap.appendChild(list);
   document.body.appendChild(wrap);
 
-  var timer = null, seq = 0, current = [];
+  // Appen (og kiosk.js) lytter globalt paa pointer/tastatur - widgetens
+  // hendelser skal ikke naa dem, ellers "krasjer" soket med kartet.
+  ["pointerdown", "pointermove", "pointerup", "keydown", "keyup", "wheel", "touchstart"].forEach(function (ev) {
+    wrap.addEventListener(ev, function (e) { e.stopPropagation(); });
+  });
 
+  var timer = null, seq = 0, current = [];
   function app() { return window.__ecdis || null; }
 
   function flyTo(lat, lon) {
@@ -2088,7 +2102,7 @@ class Component extends DCLogic {
     var t0 = performance.now(), dur = 1200;
     function step(now) {
       var f = Math.min(1, (now - t0) / dur);
-      var e = f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2; // easeInOutQuad
+      var e = f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2;
       v.lat = from.lat + (to.lat - from.lat) * e;
       v.lon = from.lon + (to.lon - from.lon) * e;
       v.zoom = from.zoom + (to.zoom - from.zoom) * e;
@@ -2105,9 +2119,10 @@ class Component extends DCLogic {
       var row = document.createElement("button");
       row.type = "button";
       row.textContent = item.address;
-      row.style.cssText = "display:block;width:100%;min-height:44px;padding:10px 14px;border:0;border-top:" + (index ? "0.5px solid rgba(60,60,67,0.12)" : "0") + ";background:rgba(255,255,255,0.96);color:#1c1c1e;font:600 12px/1.35 'Inter',system-ui,sans-serif;text-align:left;cursor:pointer;";
+      row.style.cssText = "display:block;width:100%;min-height:44px;padding:10px 14px;border:0;border-top:" + (index ? "0.5px solid rgba(60,60,67,0.12)" : "0") + ";background:rgba(255,255,255,0.92);color:#1c1c1e;font:600 12px/1.35 'Inter',system-ui,sans-serif;text-align:left;cursor:pointer;";
       row.addEventListener("pointerup", function (event) {
         event.preventDefault();
+        event.stopPropagation();
         input.value = item.address;
         render([]);
         input.blur();
@@ -2139,6 +2154,7 @@ class Component extends DCLogic {
     timer = setTimeout(function () { search(text); }, 350);
   });
   input.addEventListener("keydown", function (event) {
+    event.stopPropagation();
     if (event.key === "Enter" && current.length) {
       event.preventDefault();
       input.value = current[0].address;
@@ -2154,7 +2170,9 @@ class Component extends DCLogic {
   });
 })();
 </script>
-<a href="/select.html" onpointerup="if(!event.isPrimary){event.preventDefault();window.location.href=this.href;}" style="position:fixed;left:14px;bottom:14px;z-index:99999;min-height:46px;display:inline-grid;place-items:center;padding:0 20px;border-radius:12px;background:rgba(255,255,255,0.92);color:#1c1c1e;border:0.5px solid rgba(60,60,67,0.2);font:700 11px/1 'Inter',system-ui,sans-serif;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;box-shadow:0 8px 24px rgba(0,0,0,0.18);backdrop-filter:blur(10px);-webkit-tap-highlight-color:transparent;">Main kiosk</a>
-<a href="radar.html" onpointerup="if(!event.isPrimary){event.preventDefault();window.location.href=this.href;}" onclick="this.href='radar.html'+location.search;" style="position:fixed;left:152px;bottom:14px;z-index:99999;min-height:46px;display:inline-grid;place-items:center;padding:0 20px;border-radius:12px;background:rgba(6,20,12,0.88);color:#4ade80;border:1px solid rgba(74,222,128,0.4);font:700 11px/1 'Inter',system-ui,sans-serif;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;box-shadow:0 8px 24px rgba(0,0,0,0.3);backdrop-filter:blur(10px);-webkit-tap-highlight-color:transparent;">Radar</a>
+<div style="position:fixed;left:14px;bottom:14px;z-index:99999;display:flex;gap:8px;font-family:'Inter',system-ui,sans-serif;">
+  <a href="/select.html" onpointerup="if(!event.isPrimary){event.preventDefault();window.location.href=this.href;}" style="min-height:46px;display:inline-grid;place-items:center;padding:0 20px;border-radius:14px;background:rgba(255,255,255,0.85);color:#1c1c1e;border:0.5px solid rgba(60,60,67,0.18);font:700 11px/1 'Inter',system-ui,sans-serif;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;box-shadow:0 8px 24px rgba(0,0,0,0.12);backdrop-filter:blur(14px);-webkit-tap-highlight-color:transparent;">Main kiosk</a>
+  <a href="radar.html" onclick="this.href='radar.html'+location.search;" onpointerup="if(!event.isPrimary){event.preventDefault();window.location.href='radar.html'+location.search;}" style="min-height:46px;display:inline-grid;place-items:center;padding:0 20px;border-radius:14px;background:rgba(255,255,255,0.85);color:#0A84FF;border:0.5px solid rgba(60,60,67,0.18);font:700 11px/1 'Inter',system-ui,sans-serif;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;box-shadow:0 8px 24px rgba(0,0,0,0.12);backdrop-filter:blur(14px);-webkit-tap-highlight-color:transparent;">Radar</a>
+</div>
 </body>
 </html>
