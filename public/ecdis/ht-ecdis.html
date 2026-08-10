@@ -10,6 +10,29 @@
 <link rel="apple-touch-icon" href="favicon.svg">
 <script src="./support.js"></script>
 <script src="./kiosk.js"></script>
+<script>
+// Kiosk: hent API-nokler fra kioskens config (config/contest-config.json ->
+// /api/config) og bruk dem som standard i appens 'mrd_sources' for appen
+// booter. En nokkel brukeren selv har lagt inn i UI-et beholdes.
+// Synkron XHR med vilje: kilden er kioskens egen localhost-server og svaret
+// maa ligge klart for hovedskriptet leser localStorage.
+(function () {
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", "/api/config", false);
+    xhr.send(null);
+    if (xhr.status !== 200) return;
+    var keys = (JSON.parse(xhr.responseText) || {}).apiKeys || {};
+    if (!keys.aisstream) return;
+    var sources = {};
+    try { sources = JSON.parse(localStorage.getItem("mrd_sources") || "{}") || {}; } catch (e) {}
+    if (!sources.aisKey) {
+      sources.aisKey = String(keys.aisstream);
+      localStorage.setItem("mrd_sources", JSON.stringify(sources));
+    }
+  } catch (e) { /* file-modus eller server nede: appen kjorer simulert AIS */ }
+})();
+</script>
 </head>
 <body>
 <x-dc>
