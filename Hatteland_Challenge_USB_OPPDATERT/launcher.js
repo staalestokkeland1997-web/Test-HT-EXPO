@@ -61,6 +61,12 @@ const MODES = {
     path: "/sonar-sequence-standalone.html",
     adminPath: "/admin-games.html",
     preferredPort: 3105
+  },
+  ecdis: {
+    label: "HT ECDIS Demo",
+    path: "/ecdis/index.html?kiosk=1",
+    adminPath: "/status.html",
+    preferredPort: 3108
   }
 };
 
@@ -174,7 +180,9 @@ function ensureKioskFiles() {
     path.join(ROOT_DIR, "public", "container-stacker-standalone.html"),
     path.join(ROOT_DIR, "public", "fjord-runner-standalone.html"),
     path.join(ROOT_DIR, "public", "deep-dive-standalone.html"),
-    path.join(ROOT_DIR, "public", "sonar-sequence-standalone.html")
+    path.join(ROOT_DIR, "public", "sonar-sequence-standalone.html"),
+    path.join(ROOT_DIR, "public", "ecdis", "index.html"),
+    path.join(ROOT_DIR, "public", "ecdis", "ht-ecdis.html")
   ];
 
   for (const file of requiredFiles) {
@@ -207,6 +215,7 @@ function getMode() {
   if (process.argv.includes("--runner")) return "runner";
   if (process.argv.includes("--dive")) return "dive";
   if (process.argv.includes("--sonar")) return "sonar";
+  if (process.argv.includes("--ecdis")) return "ecdis";
   return "selector";
 }
 
@@ -221,7 +230,7 @@ async function main() {
   const displayHost = host === "0.0.0.0" ? "localhost" : host;
   const gamePath = modeConfig.path;
   const adminPath = modeConfig.adminPath;
-  const gameUrl = `http://${displayHost}:${port}${gamePath}?v=${CACHE_BUSTER}`;
+  const gameUrl = `http://${displayHost}:${port}${gamePath}${gamePath.includes("?") ? "&" : "?"}v=${CACHE_BUSTER}`;
   const adminUrl = `http://${displayHost}:${port}${adminPath}?v=${CACHE_BUSTER}`;
 
   console.log(`Starting ${modeConfig.label}...`);

@@ -13,6 +13,7 @@
     "runner": "node launcher.js --runner",
     "dive": "node launcher.js --dive",
     "sonar": "node launcher.js --sonar",
+    "ecdis": "node launcher.js --ecdis",
     "kiosk": "node launcher.js --kiosk"
   },
   "engines": {
