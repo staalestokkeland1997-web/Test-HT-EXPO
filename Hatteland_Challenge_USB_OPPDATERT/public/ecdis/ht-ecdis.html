@@ -649,7 +649,7 @@ class Component extends DCLogic {
     tool: 'pan', planning: false, rightTab: 'chart', rightOpen: true,
     simRunning: true, simSpeed: 1, displayCat: 'all',
     sensorFail: { gnss: false, gyro: false }, replay: { on: false, playing: false, pos: 1 }, routeChkVer: 0, predMin: 5, hazardWarn: true, voyOpen: false, cpaLimit: 0.5, tcpaLimit: 12,
-    layers: { s101: true, s102: false, s104: true, s111: true, s124: true, s129: true, ais: true, route: true, wind: false, waves: false, radar: false, trails: true, lights: true, temp: false, clouds: true, density: false, precip: false },
+    layers: { s101: true, s102: false, s104: true, s111: true, s124: true, s129: true, ais: true, route: true, wind: false, waves: false, radar: true, trails: true, lights: true, temp: false, clouds: true, density: false, precip: false },
     alarms: [], aisSummary: [], routeVer: 0, pick: null, metVer: 0,
     wxOpen: false, tideOpen: false, gyroOpen: false, conningOpen: false, shipUnlocked: false, autoMin: false, autoOpen: false, followShip: false, aisKeyOpen: false, aisMode: 'sim', aisStatus: 'off', gpsStatus: 'off', proxyOpen: false, srcVer: 0,
     showIntro: (() => { try { return /[?&]kiosk=1(&|$)/.test(location.search) || !localStorage.getItem('mrd_seen'); } catch (e) { return true; } })(),
@@ -1931,7 +1931,7 @@ class Component extends DCLogic {
   setTool(k) { this.setState({ tool: k, planning: k === 'route' }); }
   ackAlarm(id) { this.setState(st => ({ alarms: st.alarms.map(a => a.id === id ? { ...a, ack: true } : a) })); }
   BASE_LOCK = [];
-  DISPLAY_PRESETS = { base: ['s101', 's124', 's129', 'lights'], standard: ['s101', 's104', 's124', 's129', 'ais', 'trails', 'lights'], all: ['s101', 's102', 's104', 's111', 's124', 's129', 'ais', 'trails', 'wind', 'waves', 'radar', 'lights', 'temp', 'clouds', 'density', 'precip'] };
+  DISPLAY_PRESETS = { base: ['s101', 's124', 's129', 'lights'], standard: ['s101', 's104', 's124', 's129', 'ais', 'radar', 'trails', 'lights'], all: ['s101', 's102', 's104', 's111', 's124', 's129', 'ais', 'trails', 'wind', 'waves', 'radar', 'lights', 'temp', 'clouds', 'density', 'precip'] };
   setDisplayCat(cat) { const keys = ['s101', 's102', 's104', 's111', 's124', 's129', 'ais', 'wind', 'waves', 'radar', 'trails', 'lights', 'temp', 'clouds', 'density', 'precip']; const on = this.DISPLAY_PRESETS[cat]; this.setState(st => { const layers = { ...st.layers }; keys.forEach(k => layers[k] = on.includes(k)); return { displayCat: cat, layers }; }); }
   checkRoute() {
     const R = this.route; if (!R || R.length < 2) { this.routeCheck = { ran: true, ok: true, dangerLegs: [], minD: null, warnings: [] }; this.setState({ routeChkVer: this.state.routeChkVer + 1, rightTab: 'route' }); return; }
