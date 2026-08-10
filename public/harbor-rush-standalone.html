@@ -1362,17 +1362,26 @@
     }
 
 
+    // Bruk pointerup, ikke click: click kommer bare fra primaerpekeren, saa
+    // knappene blir doede naar en annen finger allerede hviler paa skjermen.
+    function bindTap(element, handler) {
+      element.addEventListener("pointerup", (event) => {
+        event.preventDefault();
+        handler(event);
+      });
+    }
+
     function bindEvents() {
-      ui.startButton.addEventListener("click", startCountdown);
-      ui.playAgainButton.addEventListener("click", startCountdown);
-      ui.homeButton.addEventListener("click", () => showScreen("start"));
-      ui.exitGameButton.addEventListener("click", exitToStart);
+      bindTap(ui.startButton, startCountdown);
+      bindTap(ui.playAgainButton, startCountdown);
+      bindTap(ui.homeButton, () => showScreen("start"));
+      bindTap(ui.exitGameButton, exitToStart);
       ui.registrationForm.addEventListener("submit", (event) => {
         event.preventDefault();
         saveScore();
       });
-      ui.pauseButton.addEventListener("click", pauseGame);
-      ui.resumeButton.addEventListener("click", resumeGame);
+      bindTap(ui.pauseButton, pauseGame);
+      bindTap(ui.resumeButton, resumeGame);
       // Kiosk: ingen kontekstmeny eller lenke-dragging ved lange trykk.
       document.addEventListener("contextmenu", (event) => event.preventDefault());
       document.addEventListener("dragstart", (event) => event.preventDefault());
@@ -1471,6 +1480,20 @@
     } catch (error) {
       showStartupError(error);
     }
+    // Touch: lenker skal ogsaa virke for finger nr. 2 - "click" kommer bare
+    // fra primaerpekeren, saa en hvilende finger gjor ellers lenker doede.
+    (function () {
+      var links = document.querySelectorAll("a[href]");
+      for (var i = 0; i < links.length; i += 1) {
+        (function (link) {
+          link.addEventListener("pointerup", function (event) {
+            if (event.isPrimary) return;
+            event.preventDefault();
+            window.location.href = link.href;
+          });
+        })(links[i]);
+      }
+    })();
   </script>
 </body>
 </html>

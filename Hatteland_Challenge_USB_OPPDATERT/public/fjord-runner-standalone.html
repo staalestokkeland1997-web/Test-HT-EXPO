@@ -1587,6 +1587,20 @@
         refreshBoard();
         armIdleReset();
       })();
-    </script>
+      // Touch: lenker skal ogsaa virke for finger nr. 2 - "click" kommer bare
+    // fra primaerpekeren, saa en hvilende finger gjor ellers lenker doede.
+    (function () {
+      var links = document.querySelectorAll("a[href]");
+      for (var i = 0; i < links.length; i += 1) {
+        (function (link) {
+          link.addEventListener("pointerup", function (event) {
+            if (event.isPrimary) return;
+            event.preventDefault();
+            window.location.href = link.href;
+          });
+        })(links[i]);
+      }
+    })();
+  </script>
   </body>
 </html>
