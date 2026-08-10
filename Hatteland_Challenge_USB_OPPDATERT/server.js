@@ -8,6 +8,7 @@ const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const CONFIG_PATH = path.join(ROOT_DIR, "config", "contest-config.json");
 const KIOSK_CONFIG_PATH = path.join(ROOT_DIR, "config", "kiosk-config.json");
 const DATA_PATH = path.join(ROOT_DIR, "data", "entries.json");
+const ECDIS_STATE_PATH = path.join(ROOT_DIR, "data", "ecdis-state.json");
 const BACKUP_DIR = path.join(ROOT_DIR, "data", "backups");
 const DEFAULT_KIOSK_CONFIG = {
   server: {
@@ -789,6 +790,39 @@ async function handleApi(request, response, url) {
   if (request.method === "GET" && pathname === "/api/config") {
     sendJson(response, 200, publicConfig(config));
     return;
+  }
+
+  // HT ECDIS: skipets posisjon/kurs/innstillinger lagres server-side slik at
+  // demoen fortsetter der den slapp selv om nettleserprofilen nullstilles.
+  if (pathname === "/api/ecdis-state") {
+    if (request.method === "GET") {
+      try {
+        sendJson(response, 200, JSON.parse(fs.readFileSync(ECDIS_STATE_PATH, "utf8")));
+      } catch (error) {
+        sendJson(response, 200, {});
+      }
+      return;
+    }
+
+    if (request.method === "POST") {
+      try {
+        const body = await parseJsonBody(request);
+        const document = JSON.stringify(body);
+
+        if (document.length > 256 * 1024) {
+          sendJson(response, 413, { error: "State too large." });
+          return;
+        }
+
+        const tempPath = ECDIS_STATE_PATH + ".tmp";
+        fs.writeFileSync(tempPath, document + "\n", "utf8");
+        fs.renameSync(tempPath, ECDIS_STATE_PATH);
+        sendJson(response, 200, { ok: true });
+      } catch (error) {
+        sendJson(response, 400, { error: "Invalid state payload." });
+      }
+      return;
+    }
   }
 
   if (request.method === "GET" && pathname === "/api/leaderboard") {
