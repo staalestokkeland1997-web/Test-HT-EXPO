@@ -497,7 +497,10 @@ function publicConfig(config) {
     diveGame: config.diveGame || {},
     sonarGame: config.sonarGame || {},
     privacy: config.privacy,
-    theme: config.theme
+    theme: config.theme,
+    // API-nokler for innebygde demoer (f.eks. aisstream.io for HT ECDIS).
+    // Disse brukes av klienten direkte og er derfor bevisst i public config.
+    apiKeys: config.apiKeys || {}
   };
 }
 

@@ -158,6 +158,10 @@ Viktige seksjoner i `contest-config.json`:
 - `sonarGame`: Sonar Sequence settings (antall kontakter, tempo, svartid).
 - `brand`: navn, logo, premie og lenker.
 - `admin.password`: passord for adminsidene.
+- `apiKeys`: API-nokler for innebygde demoer. `apiKeys.aisstream` brukes av
+  HT ECDIS som standardnokkel for live AIS (ekte skip i kartet) - appen
+  kobler til automatisk ved oppstart. En nokkel lagt inn manuelt i appens
+  "Live sources"-panel har forrang. Flere nokler kan legges til her senere.
 
 Standard adminpassord ligger i denne filen. Passordet sendes ikke til vanlig frontend, men alle med filtilgang til minnepennen kan lese det. Bytt passord foer messen.
 
