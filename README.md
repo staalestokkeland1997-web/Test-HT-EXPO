@@ -161,7 +161,16 @@ Viktige seksjoner i `contest-config.json`:
 - `apiKeys`: API-nokler for innebygde demoer. `apiKeys.aisstream` brukes av
   HT ECDIS som standardnokkel for live AIS (ekte skip i kartet) - appen
   kobler til automatisk ved oppstart. En nokkel lagt inn manuelt i appens
-  "Live sources"-panel har forrang. Flere nokler kan legges til her senere.
+  "Live sources"-panel har forrang. `apiKeys.arcgis` (ArcGIS API key med
+  Location services > Basemaps) laaser opp Flyfoto-basemappet i ECDIS med
+  token paa Esri-flisene - uten nokkel er Flyfoto skjult, siden anonym bruk
+  paa messe er utenfor Esris vilkaar. Flere nokler kan legges til senere.
+- HT ECDIS husker seg selv mellom omstarter: skipets posisjon, kurs, rute,
+  kartlag, palett og basemap lagres hvert 5. sekund (localStorage + server i
+  `data/ecdis-state.json`). Ved neste oppstart dodregnes skipet frem langs
+  ruten etter veggklokken, saa demoen ser ut som den har seilt hele tiden.
+  Lasteskjermen og introduksjonen vises bare forste gang. Slett
+  `data/ecdis-state.json` (og nettleserens localStorage) for aa nullstille.
 
 Standard adminpassord ligger i denne filen. Passordet sendes ikke til vanlig frontend, men alle med filtilgang til minnepennen kan lese det. Bytt passord foer messen.
 

@@ -25,7 +25,8 @@
     "confirmationAutoResetSeconds": 12
   },
   "apiKeys": {
-    "aisstream": "1359f173a821db5d3b6b8278a865a3eeae17dfdc"
+    "aisstream": "1359f173a821db5d3b6b8278a865a3eeae17dfdc",
+    "arcgis": ""
   },
   "game": {
     "difficultyName": "Custom",

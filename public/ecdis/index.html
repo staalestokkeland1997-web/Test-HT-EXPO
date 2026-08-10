@@ -41,6 +41,13 @@
 <script>
   // Carry the query string (notably ?kiosk=1) through to the demo.
   var TARGET = "./ht-ecdis.html" + location.search;
+  // Etter forste boot gaar kiosken rett i appen - ingen lasteskjerm.
+  var skipBoot = false;
+  try { skipBoot = !!localStorage.getItem("mrd_boot"); } catch (e) {}
+  if (skipBoot) {
+    document.getElementById("load").style.display = "none";
+    window.location.replace(TARGET);
+  }
   if (location.search) {
     var links = document.querySelectorAll(".alt a");
     for (var k = 0; k < links.length; k++) links[k].href = links[k].getAttribute("href") + location.search;
@@ -61,6 +68,7 @@
   fetch(TARGET, { cache: "force-cache" }).catch(function(){});
 
   function go(){
+    try { localStorage.setItem("mrd_boot", "1"); } catch (e) {}
     clearInterval(t);
     var load = document.getElementById("load");
     load.style.opacity = "0";
