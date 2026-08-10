@@ -15,6 +15,7 @@ Sju touchspill med maritimt preg, alle med egen highscoreliste:
 | Bridge Duel | 1 mot 1 | `/bridge-duel-standalone.html` |
 | HT Air Hockey | 1 mot 1 | `/air-hockey-standalone.html` |
 | Sonar Sequence | Hukommelse, 1 spiller | `/sonar-sequence-standalone.html` |
+| HT ECDIS | Sjokart-demo (ikke spill) | `/ecdis/index.html?kiosk=1` |
 
 I tillegg:
 
@@ -23,6 +24,11 @@ I tillegg:
 - Spillinnstillinger og highscore per spill: `/admin-games.html`.
 - Harbor Rush detaljadmin: `/admin-rush.html`.
 - Bridge Duel detaljadmin: `/admin-duel.html`.
+- HT ECDIS er en innebygd sjokart-demonstrator (fra HT-S100-Demo): ekte norske
+  sjokart, vaer og ruteplanlegging. Krever internett for kartfliser; UI-et selv
+  starter offline. Serveren har en `/proxy` (streng allowlist) som appen bruker
+  for MET/yr og Kartverket tidevann. "Main kiosk"-knappen nede til venstre gaar
+  tilbake til spillvelgeren. DEMO - ikke for navigasjon.
 - Lokal lagring av deltakere i `data/entries.json` (hver oppforing merkes med spill).
 - CSV-eksport per spill eller samlet.
 - Konfigurasjon for spill, branding, adminpassord, port og kioskstart.
@@ -74,6 +80,7 @@ npm run rush       # start rett i Harbor Rush
 npm run duel       # start rett i Bridge Duel 1v1
 npm run airhockey  # start rett i HT Air Hockey
 npm run sonar      # start rett i Sonar Sequence
+npm run ecdis      # start rett i HT ECDIS-demoen
 npm run kiosk      # spillvelger i kiosk/fullskjerm
 ```
 

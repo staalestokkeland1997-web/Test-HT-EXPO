@@ -17,6 +17,7 @@
       "fjordRunner": "/fjord-runner-standalone.html",
       "deepDive": "/deep-dive-standalone.html",
       "sonarSequence": "/sonar-sequence-standalone.html",
+      "ecdisDemo": "/ecdis/index.html?kiosk=1",
       "admin": "/admin.html",
       "adminRush": "/admin-rush.html",
       "adminDuel": "/admin-duel.html",

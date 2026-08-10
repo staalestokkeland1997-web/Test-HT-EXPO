@@ -90,7 +90,12 @@ const MIME_TYPES = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
-  ".ico": "image/x-icon"
+  ".ico": "image/x-icon",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".txt": "text/plain; charset=utf-8"
 };
 
 function ensureDataFile() {
@@ -742,6 +747,12 @@ function serveStatic(requestPath, response) {
   }
 
   fs.stat(filePath, (error, stat) => {
+    // En katalog-URL (f.eks. /ecdis/) serverer katalogens index.html.
+    if (!error && stat.isDirectory()) {
+      serveStatic(requestedPath.replace(/\/?$/, "/index.html"), response);
+      return;
+    }
+
     if (error || !stat.isFile()) {
       sendText(response, 404, "Not found");
       return;
@@ -1061,12 +1072,85 @@ async function handleApi(request, response, url) {
   });
 }
 
+// CORS-proxy for ECDIS-demoens dataleverandoerer (MET/yr, Kartverket tide,
+// EMODnet, kystlinje). Streng allowlist saa den ikke kan misbrukes som aapent
+// relay; api.met.no krever dessuten en identifiserende User-Agent.
+const PROXY_HOSTS = new Set([
+  "api.met.no",
+  "vannstand.kartverket.no",
+  "ows.emodnet-bathymetry.eu",
+  "d2ad6b4ur7yvpq.cloudfront.net",
+  "raw.githubusercontent.com"
+]);
+const PROXY_UA = "HT-ECDIS-Demo/1.0 (github.com/staalestokkeland1997-web/HT-S100-Demo)";
+
+function handleProxy(request, response, query) {
+  const cors = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "*"
+  };
+
+  if (request.method === "OPTIONS") {
+    response.writeHead(204, cors);
+    response.end();
+    return;
+  }
+
+  if (query.get("ping") !== null && !query.get("url")) {
+    response.writeHead(200, { ...cors, "Content-Type": "text/plain" });
+    response.end("ok");
+    return;
+  }
+
+  let target;
+  try {
+    target = new URL(query.get("url") || "");
+  } catch (error) {
+    response.writeHead(400, cors);
+    response.end("Bad url");
+    return;
+  }
+
+  if (target.protocol !== "https:" || !PROXY_HOSTS.has(target.hostname)) {
+    response.writeHead(403, cors);
+    response.end("Host not allowed: " + target.hostname);
+    return;
+  }
+
+  if (typeof fetch !== "function") {
+    response.writeHead(502, { ...cors, "Content-Type": "text/plain" });
+    response.end("Proxy requires Node.js 18 or newer.");
+    return;
+  }
+
+  fetch(target.href, { headers: { "User-Agent": PROXY_UA }, redirect: "follow" })
+    .then(async (upstream) => {
+      const body = Buffer.from(await upstream.arrayBuffer());
+      response.writeHead(upstream.status, {
+        ...cors,
+        "Content-Type": upstream.headers.get("content-type") || "application/octet-stream",
+        "Cache-Control": "no-cache"
+      });
+      response.end(body);
+    })
+    .catch((error) => {
+      response.writeHead(502, { ...cors, "Content-Type": "text/plain" });
+      response.end("Upstream error: " + error.message);
+    });
+}
+
 const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url, "http://localhost");
 
     if (url.pathname.startsWith("/api/")) {
       await handleApi(request, response, url);
+      return;
+    }
+
+    if (url.pathname === "/proxy") {
+      handleProxy(request, response, url.searchParams);
       return;
     }
 
