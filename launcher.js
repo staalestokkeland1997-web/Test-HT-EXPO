@@ -67,6 +67,12 @@ const MODES = {
     path: "/ecdis/index.html?kiosk=1",
     adminPath: "/status.html",
     preferredPort: 3108
+  },
+  radar: {
+    label: "HT Radar Demo",
+    path: "/ecdis/radar.html?kiosk=1",
+    adminPath: "/status.html",
+    preferredPort: 3109
   }
 };
 
@@ -182,7 +188,8 @@ function ensureKioskFiles() {
     path.join(ROOT_DIR, "public", "deep-dive-standalone.html"),
     path.join(ROOT_DIR, "public", "sonar-sequence-standalone.html"),
     path.join(ROOT_DIR, "public", "ecdis", "index.html"),
-    path.join(ROOT_DIR, "public", "ecdis", "ht-ecdis.html")
+    path.join(ROOT_DIR, "public", "ecdis", "ht-ecdis.html"),
+    path.join(ROOT_DIR, "public", "ecdis", "radar.html")
   ];
 
   for (const file of requiredFiles) {
@@ -216,6 +223,7 @@ function getMode() {
   if (process.argv.includes("--dive")) return "dive";
   if (process.argv.includes("--sonar")) return "sonar";
   if (process.argv.includes("--ecdis")) return "ecdis";
+  if (process.argv.includes("--radar")) return "radar";
   return "selector";
 }
 

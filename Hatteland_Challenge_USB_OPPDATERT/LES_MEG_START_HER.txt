@@ -23,6 +23,7 @@ STARTE SPILLENE (dobbeltklikk en av disse)
    START_AIR_HOCKEY.bat        Starter rett i Air Hockey
    START_SONAR.bat             Starter rett i Sonar Sequence
    START_ECDIS.bat             Starter rett i HT ECDIS-demoen (sjokart)
+   START_RADAR.bat             Starter rett i HT Radar-demoen (PPI-radar)
 
 Det apnes et svart vindu (Node-server) og nettleseren med spillet.
 I det svarte vinduet vises Game-URL og Settings/Admin-URL.
