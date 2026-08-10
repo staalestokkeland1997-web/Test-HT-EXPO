@@ -999,12 +999,16 @@
           if (state.over) return;
 
           state.pearlsList = state.pearlsList.filter(function (pearl) {
+            // Svept vindu: paa hoy fart kan x hoppe forbi ubaaten paa en
+            // treg frame, saa sjekk hele strekningen fra forrige posisjon.
+            var pearlPrevX = pearl.x;
             pearl.x -= scroll;
             pearl.pulse += dt * 5;
 
             if (
               !pearl.taken &&
-              Math.abs(pearl.x - subXFrac) < subRFracX + 0.012 &&
+              pearl.x < subXFrac + subRFracX + 0.012 &&
+              pearlPrevX > subXFrac - subRFracX - 0.012 &&
               Math.abs(pearl.y - state.subY) < subRFracY + 0.03
             ) {
               pearl.taken = true;
@@ -1019,13 +1023,15 @@
           });
 
           state.mines = state.mines.filter(function (mine) {
+            var minePrevX = mine.x;
             mine.x -= scroll;
             mine.phase += dt * 1.4;
             var y = mine.y + Math.sin(mine.phase) * mine.amplitude;
 
             if (
               !mine.hit &&
-              Math.abs(mine.x - subXFrac) < subRFracX + 0.014 &&
+              mine.x < subXFrac + subRFracX + 0.014 &&
+              minePrevX > subXFrac - subRFracX - 0.014 &&
               Math.abs(y - state.subY) < subRFracY + 0.022
             ) {
               mine.hit = true;
@@ -1058,7 +1064,7 @@
         }
 
         function currentScore() {
-          return state.score + Math.floor(state.depth / 100) * Number(settings.distancePointsPer100m || 10);
+          return state.score + Math.floor(state.depth / 100) * (Number.isFinite(Number(settings.distancePointsPer100m)) ? Number(settings.distancePointsPer100m) : 10);
         }
 
         function crash() {
@@ -1480,6 +1486,9 @@
           ui.pauseOverlay.classList.add("hidden");
           document.body.classList.add("game-running");
           lastTime = performance.now();
+          // Avbryt et eventuelt ventende frame forst, ellers kan raske
+          // pause/fortsett-trykk gi to samtidige lokker og dobbel fart.
+          cancelAnimationFrame(animationId);
           animationId = requestAnimationFrame(loop);
         }
 
@@ -1615,6 +1624,7 @@
               renderBoard(ui.endBoard, boardEntries);
               renderBoard(ui.startBoard, boardEntries);
               ui.message.textContent = "Saved to the Deep Dive board.";
+              ui.rankTeaser.textContent = "You are on the board!";
               ui.saveButton.textContent = "Saved";
             })
             .catch(function () {
@@ -1675,34 +1685,41 @@
           saveScore();
         });
 
-        // En finger: hold = stig, slipp = synk.
+        // Hold = stig, slipp = synk. Tell aktive pekere slik at to fingre
+        // paa skjermen ikke slipper loftet naar bare en av dem loftes.
+        var activePointers = new Set();
+        var keyThrust = false;
+
+        function syncThrust() {
+          state.thrusting = state.running && !state.paused && (activePointers.size > 0 || keyThrust);
+        }
+
         canvas.addEventListener("pointerdown", function (event) {
           event.preventDefault();
-          if (state.running && !state.paused) state.thrusting = true;
+          activePointers.add(event.pointerId);
+          syncThrust();
         });
 
         ["pointerup", "pointercancel"].forEach(function (name) {
-          canvas.addEventListener(name, function (event) {
-            event.preventDefault();
-            state.thrusting = false;
+          window.addEventListener(name, function (event) {
+            activePointers.delete(event.pointerId);
+            syncThrust();
           });
-        });
-
-        window.addEventListener("pointerup", function () {
-          if (state) state.thrusting = false;
         });
 
         window.addEventListener("keydown", function (event) {
           if (event.key === " " || event.key === "ArrowUp") {
             event.preventDefault();
-            if (state.running && !state.paused) state.thrusting = true;
+            keyThrust = true;
+            syncThrust();
           }
         });
 
         window.addEventListener("keyup", function (event) {
           if (event.key === " " || event.key === "ArrowUp") {
             event.preventDefault();
-            state.thrusting = false;
+            keyThrust = false;
+            syncThrust();
           }
         });
 

@@ -1051,7 +1051,7 @@
           if (state.shieldUntil > state.elapsed) return;
           state.lives -= 1;
           state.streak = 0;
-          state.shieldUntil = state.elapsed + Number(settings.shieldSeconds || 2) * 1000;
+          state.shieldUntil = state.elapsed + (Number.isFinite(Number(settings.shieldSeconds)) ? Number(settings.shieldSeconds) : 2) * 1000;
           state.shake = 1;
           state.damageFlash = 1;
           renderLives();
@@ -1185,7 +1185,7 @@
             if (state.banner.life <= 0) state.banner = null;
           }
 
-          var scorePoints = Math.floor(state.distance / 100) * Number(settings.distancePointsPer100m || 10);
+          var scorePoints = Math.floor(state.distance / 100) * (Number.isFinite(Number(settings.distancePointsPer100m)) ? Number(settings.distancePointsPer100m) : 10);
           state.displayScore = state.score + scorePoints;
 
           // Rekordtempo midt i runden - den sterkeste grunnen til aa holde ut.
@@ -1685,7 +1685,7 @@
           // frame etter naar doden inntreffer midt i en oppdatering.
           var finalScore = Math.min(
             99999,
-            state.score + Math.floor(state.distance / 100) * Number(settings.distancePointsPer100m || 10)
+            state.score + Math.floor(state.distance / 100) * (Number.isFinite(Number(settings.distancePointsPer100m)) ? Number(settings.distancePointsPer100m) : 10)
           );
           var record = getRecord();
           var isRecord = finalScore > record;
@@ -1757,6 +1757,9 @@
           ui.pauseOverlay.classList.add("hidden");
           document.body.classList.add("game-running");
           lastTime = performance.now();
+          // Avbryt et eventuelt ventende frame forst, ellers kan raske
+          // pause/fortsett-trykk gi to samtidige lokker og dobbel fart.
+          cancelAnimationFrame(animationId);
           animationId = requestAnimationFrame(loop);
         }
 
@@ -1895,6 +1898,7 @@
               renderBoard(ui.endBoard, boardEntries);
               renderBoard(ui.startBoard, boardEntries);
               ui.message.textContent = "Saved to the Fjord Runner board.";
+              ui.rankTeaser.textContent = "You are on the board!";
               ui.saveButton.textContent = "Saved";
             })
             .catch(function () {

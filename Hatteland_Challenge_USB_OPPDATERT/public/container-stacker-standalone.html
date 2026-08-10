@@ -2025,6 +2025,9 @@
           ui.pauseOverlay.classList.add("hidden");
           document.body.classList.add("game-running");
           lastTime = performance.now();
+          // Avbryt et eventuelt ventende frame forst, ellers kan raske
+          // pause/fortsett-trykk gi to samtidige lokker og dobbel fart.
+          cancelAnimationFrame(animationId);
           animationId = requestAnimationFrame(loop);
         }
 
@@ -2173,6 +2176,7 @@
               renderBoard(ui.endBoard, boardEntries);
               renderBoard(ui.startBoard, boardEntries);
               ui.message.textContent = "Saved to the Container Stacker board.";
+              ui.rankTeaser.textContent = "You are on the board!";
               ui.saveButton.textContent = "Saved";
             })
             .catch(function () {
