@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-$UsbRoot = Join-Path $Root "Hatteland_Challenge_USB"
+$UsbRoot = $Root
 $Page = if ($Game -eq "duel") { "bridge-duel-standalone.html" } else { "harbor-rush-standalone.html" }
 $Button = if ($Game -eq "duel") { "startButton" } else { "startButton" }
 $OverlayExpression = if ($Game -eq "duel") {

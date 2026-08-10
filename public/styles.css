@@ -1,15 +1,15 @@
 :root {
-  --accent: #6df7c1;
-  --accent-strong: #1be092;
-  --secondary: #ffb649;
-  --danger: #ff5b5b;
-  --surface: #0d1826;
-  --surface-alt: #16263a;
-  --text: #f4f8fb;
-  --muted: #9eb3c7;
+  --accent: #4fe3ff;
+  --accent-strong: #2bb8e0;
+  --secondary: #f5c84b;
+  --danger: #ff5d6c;
+  --surface: #07131f;
+  --surface-alt: #102a3d;
+  --text: #f4fbff;
+  --muted: #8fa8b8;
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
-  --font-display: "Bahnschrift", "Aptos Display", "Trebuchet MS", "Segoe UI", sans-serif;
-  --font-body: "Aptos", "Segoe UI", "Trebuchet MS", sans-serif;
+  --font-display: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  --font-body: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
 }
 
 * {
@@ -21,9 +21,9 @@ body {
   min-height: 100%;
   margin: 0;
   background:
-    radial-gradient(circle at top left, rgba(127, 231, 255, 0.16), transparent 30%),
-    radial-gradient(circle at bottom right, rgba(255, 211, 107, 0.14), transparent 26%),
-    linear-gradient(180deg, #041521, #07253b 48%, #0e3d54);
+    radial-gradient(circle at 16% 12%, rgba(79, 227, 255, 0.13), transparent 34rem),
+    radial-gradient(circle at 84% 88%, rgba(245, 200, 75, 0.1), transparent 34rem),
+    linear-gradient(150deg, #04121d 0%, #02070d 62%);
   color: var(--text);
   font-family: var(--font-body);
 }
@@ -465,18 +465,24 @@ p {
 .secondary-button,
 .ghost-button,
 .danger-button {
-  min-height: 4rem;
+  min-height: 3.2rem;
   padding: 0 1.4rem;
-  border-radius: 999px;
-  font-weight: 700;
+  border-radius: 12px;
+  display: inline-grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 0.82rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
   transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
   touch-action: manipulation;
 }
 
 .primary-button {
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  color: #042516;
-  box-shadow: 0 12px 30px rgba(27, 224, 146, 0.24);
+  background: linear-gradient(120deg, var(--accent), var(--accent-strong));
+  color: #06202b;
+  box-shadow: 0 12px 30px rgba(79, 227, 255, 0.22);
 }
 
 .secondary-button {
