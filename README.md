@@ -168,6 +168,11 @@ Viktige seksjoner i `contest-config.json`:
   (skriv "Bergen" eller et havnenavn og kartet flyr dit, ArcGIS Geocoding).
   Uten nokkel er Flyfoto/Ocean skjult og soket borte, siden anonym bruk paa
   messe er utenfor Esris vilkaar. Flere nokler kan legges til senere.
+- Nytt datalag "Ship traffic density" (Chart -> Data layers): EMODnet
+  Human Activities' skipstetthetskart (AIS-aarsgjennomsnitt, 1x1 km, fritt
+  EU-datasett) tegnes over sjokartet - viser hvor trafikken faktisk gaar.
+  Ocean-basemappet har i tillegg faatt Esris referanselag (sjonavn og
+  dybdelabels) oppaa flisene.
 - HT ECDIS husker seg selv mellom omstarter: skipets posisjon, kurs, rute,
   kartlag, palett og basemap lagres hvert 5. sekund (localStorage + server i
   `data/ecdis-state.json`). Ved neste oppstart dodregnes skipet frem langs
