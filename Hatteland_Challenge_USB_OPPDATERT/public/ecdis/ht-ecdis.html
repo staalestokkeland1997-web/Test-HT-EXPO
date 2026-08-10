@@ -1667,7 +1667,7 @@ class Component extends DCLogic {
   }
 
   // events
-  onWheel = (e) => { e.preventDefault(); this._gestureT = performance.now(); const r = this.canvas.getBoundingClientRect(); const mx = e.clientX - r.left, my = e.clientY - r.top; const before = this.s2ll(mx, my); this.view.zoom = Math.max(4.5, Math.min(16, this.view.zoom - Math.sign(e.deltaY) * 0.32)); this._cw = this.project(this.view.lat, this.view.lon, this.view.zoom); this._cos = Math.cos(this.view.bearing); this._sin = Math.sin(this.view.bearing); const after = this.s2ll(mx, my); this.view.lat += before[0] - after[0]; this.view.lon += before[1] - after[1]; };
+  onWheel = (e) => { e.preventDefault(); this._gestureT = performance.now(); const r = this.canvas.getBoundingClientRect(); const mx = e.clientX - r.left, my = e.clientY - r.top; const before = this.s2ll(mx, my); this.view.zoom = Math.max(4.5, Math.min(18, this.view.zoom - Math.sign(e.deltaY) * 0.32)); this._cw = this.project(this.view.lat, this.view.lon, this.view.zoom); this._cos = Math.cos(this.view.bearing); this._sin = Math.sin(this.view.bearing); const after = this.s2ll(mx, my); this.view.lat += before[0] - after[0]; this.view.lon += before[1] - after[1]; };
   onDown = (e) => { const r = this.canvas.getBoundingClientRect(); const mx = e.clientX - r.left, my = e.clientY - r.top;
     // Two-finger pinch: second pointer cancels any drag and enters pinch mode
     // (zoom about the finger midpoint + pan with it), like every touch map.
@@ -1684,7 +1684,7 @@ class Component extends DCLogic {
         this._gestureT = performance.now();
         if (this.state.followShip && Math.hypot(cx - P.cx, cy - P.cy) > 6) this.setState({ followShip: false });
         const before = this.s2ll(P.cx, P.cy);
-        this.view.zoom = Math.max(4.5, Math.min(16, this.view.zoom + Math.log2(d / P.d)));
+        this.view.zoom = Math.max(4.5, Math.min(18, this.view.zoom + Math.log2(d / P.d)));
         this._cw = this.project(this.view.lat, this.view.lon, this.view.zoom); this._cos = Math.cos(this.view.bearing); this._sin = Math.sin(this.view.bearing);
         const after = this.s2ll(cx, cy);
         this.view.lat += before[0] - after[0]; this.view.lon += before[1] - after[1];
@@ -1903,7 +1903,7 @@ class Component extends DCLogic {
       planDotColor: plan ? '#FF9F0A' : (R.length ? '#34C759' : '#8e8e93'),
       onLoadDemo: () => this.loadDemoRoute(), onClearRoute: () => this.clearRoute(), channelLabel: (this.channel || 0.2).toFixed(2) + ' nm',
       noWaypoints: !R.length, alarmCount: s.alarms.filter(a => !a.ack).length, noAlarms: !s.alarms.length, onAckAll: () => this.setState({ alarms: s.alarms.map(a => ({ ...a, ack: true })) }),
-      onZoomIn: () => { this.view.zoom = Math.min(16, this.view.zoom + 0.6); }, onZoomOut: () => { this.view.zoom = Math.max(4.5, this.view.zoom - 0.6); },
+      onZoomIn: () => { this.view.zoom = Math.min(18, this.view.zoom + 0.6); }, onZoomOut: () => { this.view.zoom = Math.max(4.5, this.view.zoom - 0.6); },
       onCenterShip: () => { this.view.lat = this.ownShip.lat; this.view.lon = this.ownShip.lon; }, onToggleFollow: () => { const f = !this.state.followShip; if (f) { this.view.lat = this.ownShip.lat; this.view.lon = this.ownShip.lon; } this.setState({ followShip: f }); }, followTitle: s.followShip ? 'Følger skipet — trykk for å låse opp' : 'Følg skipet (kartet sentreres på skipet)', followStyle: C('width:34px;height:34px;border:none;background:' + (s.followShip ? 'var(--accent,#0A84FF)' : 'transparent') + ';color:' + (s.followShip ? '#fff' : 'var(--accent,#0A84FF)') + ';cursor:pointer;border-radius:11px;display:flex;align-items:center;justify-content:center;'), onCycleOrient: () => this.setState({ orient: s.orient === 'north' ? 'course' : s.orient === 'course' ? 'head' : 'north' }),
       onToggleSim: () => this.setState({ simRunning: !s.simRunning }), playIcon: s.simRunning ? '❚❚' : '▶', simStateLabel: (s.simRunning ? 'Running' : 'Paused') + ' · ' + s.simSpeed + '×',
       onSpeed1: () => this.setState({ simSpeed: 1 }), onSpeed8: () => this.setState({ simSpeed: 8 }), onSpeed30: () => this.setState({ simSpeed: 30 }),
