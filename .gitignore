@@ -20,3 +20,8 @@ Hatteland_Challenge_USB_OPPDATERT.zip
 
 # Sikkerhetskopier av deltakerdata lages lokalt under drift
 data/backups/
+**/data/backups/
+
+# ECDIS-seilasen lagres av serveren under kjoring (slett for aa nullstille)
+data/ecdis-state.json
+**/data/ecdis-state.json
