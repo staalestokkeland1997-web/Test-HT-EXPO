@@ -173,14 +173,27 @@ Viktige seksjoner i `contest-config.json`:
   EU-datasett) tegnes over sjokartet - viser hvor trafikken faktisk gaar.
   Ocean-basemappet har i tillegg faatt Esris referanselag (sjonavn og
   dybdelabels) oppaa flisene.
-- HT Radar (`/ecdis/radar.html?kiosk=1`): egen fullskjerms PPI-radarside med
-  roterende sveip og etterglod, avstandsringer, peilering, kurslinje,
-  N-UP/H-UP, range 0,75-24 nm, EBL/VRM (dra paa skopet), trails, AIS-ekko
-  med vektorer og navn, gain/sea/rain-clutter og landekko fra kystlinjen.
-  Radaren folger SAMME seilas som ECDIS: den leser samme lagrede tilstand
-  og dodregner likt, og naar ECDIS er aapen samtidig overtar dens direkte-
-  sendte posisjon og AIS-maal (BroadcastChannel). Knapper kobler ECDIS <->
-  Radar <-> kiosk. `npm run radar` / START_RADAR.bat starter rett i radaren.
+- HT Radar (`/ecdis/radar.html?kiosk=1`): fullverdig radarkonsoll (demo) med
+  roterende sveip og etterglod, datablokker i hjornene, peilering med kurs-
+  og nordmerke, TX/STBY, pulslengde SP/MP/LP, range 0,25-48 nm, ringer av/paa,
+  N-UP/H-UP/C-UP, RM/TM (med TM-reset), off-center, trails 30 s-6 min,
+  relative/sanne vektorer 3/6/12 min, cursoravlesning, EBL/VRM, ARPA-
+  maalfolging (ACQ TT) med CPA/TCPA, faremaal-alarm med grenser, guard zone,
+  maalliste, alarmliste med ACK, gain/sea/rain + AUTO, interferens-
+  undertrykking (IR), echo stretch, gronn/amber fosfor og landekko fra
+  kystlinjen. Radaren folger SAMME seilas som ECDIS: den leser samme lagrede
+  tilstand og dodregner likt, og naar ECDIS er aapen samtidig overtar dens
+  direktesendte posisjon og AIS-maal (BroadcastChannel). Knapper kobler
+  ECDIS <-> Radar <-> kiosk. `npm run radar` / START_RADAR.bat starter rett
+  i radaren.
+- ECDIS-dokken (Main kiosk- og Radar-knappene nede til venstre og havnesoket
+  oppe ved merkevare-pillen) er stylet med appens egne palettvariabler og
+  folger day/dusk/night automatisk. Havnesoket har innebygd norsk havneliste
+  (virker offline; ArcGIS-sok legges oppaa naar API-nokkel finnes) og et eget
+  touch-tastatur med AE/O/AA i samme glass-stil. Velg et treff for aa faa et
+  destinasjonskort med "Set route to destination": appens dybdetrygge
+  autoroute planlegger ruten og seilasen startes automatisk. Havner utenfor
+  demo-kartomraadet vises som "view only".
 - HT ECDIS husker seg selv mellom omstarter: skipets posisjon, kurs, rute,
   kartlag, palett og basemap lagres hvert 5. sekund (localStorage + server i
   `data/ecdis-state.json`). Ved neste oppstart dodregnes skipet frem langs
