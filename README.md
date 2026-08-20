@@ -183,7 +183,10 @@ Viktige seksjoner i `contest-config.json`:
   undertrykking (IR), echo stretch, gronn/amber fosfor og landekko fra
   kystlinjen. Radaren folger SAMME seilas som ECDIS: den leser samme lagrede
   tilstand og dodregner likt, og naar ECDIS er aapen samtidig overtar dens
-  direktesendte posisjon og AIS-maal (BroadcastChannel). Knapper kobler
+  direktesendte posisjon og AIS-maal (BroadcastChannel). AIS-bildet deles
+  ogsaa via `mrd_ais` i localStorage: begge sidene lagrer sist viste flaate
+  hvert 5. sekund og dodregner den frem ved oppstart, saa ECDIS og radar
+  viser SAMME baater ogsaa naar sidene aapnes etter hverandre. Knapper kobler
   ECDIS <-> Radar <-> kiosk. `npm run radar` / START_RADAR.bat starter rett
   i radaren.
 - ECDIS-dokken (Main kiosk- og Radar-knappene nede til venstre og havnesoket
@@ -193,7 +196,11 @@ Viktige seksjoner i `contest-config.json`:
   touch-tastatur med AE/O/AA i samme glass-stil. Velg et treff for aa faa et
   destinasjonskort med "Set route to destination": appens dybdetrygge
   autoroute planlegger ruten og seilasen startes automatisk. Havner utenfor
-  demo-kartomraadet vises som "view only".
+  demo-kartomraadet vises som "view only". Ruteplanleggingen kjorer
+  tidsskivet i bakgrunnen, saa kartet kan panoreres/zoomes og alle knapper
+  virker mens ruten beregnes. I live-AIS-modus varmstartes skjermen fra sist
+  kjente fartoy (dodregnet frem) til ekte meldinger tar over, i stedet for aa
+  staa tom mens fartoyene rapporterer inn en og en.
 - HT ECDIS husker seg selv mellom omstarter: skipets posisjon, kurs, rute,
   kartlag, palett og basemap lagres hvert 5. sekund (localStorage + server i
   `data/ecdis-state.json`). Ved neste oppstart dodregnes skipet frem langs
