@@ -366,6 +366,7 @@
   })();
   // Ren dodregning langs COG — samme fremskriving som ECDIS gjor for baatene
   // sine, saa bildet holder seg likt naar man bytter mellom sidene.
+  var fleetAcc = 0;
   function targetsTick(dt) {
     for (var i = 0; i < simTargets.length; i++) {
       var t = simTargets[i];
@@ -373,6 +374,20 @@
       if (!t.sog) continue;
       var step = moveLL(t.lat, t.lon, t.cog, t.sog * dt / 3600);
       t.lat = step.lat; t.lon = step.lon;
+    }
+    // Flaaten folger eget skip (samme oppforsel som ECDIS): baater som er
+    // sakket > 30 nm akterut respawnes 8-18 nm foran baugen med kryssende
+    // kurs, saa skopet alltid har trafikk ogsaa paa lange transitter.
+    if (liveTargets && Date.now() - liveTargetsAt < 6000) return;
+    fleetAcc += dt;
+    if (fleetAcc < 5) return;
+    fleetAcc = 0;
+    for (var j = 0; j < simTargets.length; j++) {
+      var s2 = simTargets[j];
+      if (distNm(s2, own) <= 30) continue;
+      var p = moveLL(own.lat, own.lon, (own.cog || 0) + (Math.random() * 120 - 60), 8 + Math.random() * 10);
+      s2.lat = p.lat; s2.lon = p.lon;
+      s2.cog = s2.hdg = ((own.cog || 0) + 100 + Math.random() * 160) % 360;
     }
   }
   function targets() {
