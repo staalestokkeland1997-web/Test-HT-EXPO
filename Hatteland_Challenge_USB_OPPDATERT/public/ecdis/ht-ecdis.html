@@ -1166,11 +1166,13 @@ class Component extends DCLogic {
       if (v.length) {
         const o = this.ownShip;
         let near = 0;
-        for (const t of v) if (this.distNm(o, t) < 60) { near++; if (near >= 3) break; }
-        if (near >= 3) return v;
+        for (const t of v) if (this.distNm(o, t) < 25) { near++; if (near >= 3) break; }
+        if (near >= 3) { this._aisView = 'live'; return v; }
+        this._aisView = 'blend';
         return this.ais.concat(v);
       }
     }
+    this._aisView = 'sim';
     return this.ais;
   }
   aisColor(id) { const c = ['#0A84FF', '#34C759', '#FF9F0A', '#BF5AF2', '#FF375F', '#30B0C7', '#FFD60A']; return c[Math.abs(id | 0) % c.length]; }
@@ -1494,10 +1496,12 @@ class Component extends DCLogic {
     // faster, so a wall-clock cadence would let ships close half a mile
     // between give-way decisions.
     this._trafAcc = (this._trafAcc || 0) + sdt;
-    if (!live && this._trafAcc > 15) {
+    // Kjorres for SIM-flaaten ogsaa i blandet live-visning — men aldri paa
+    // ekte fartoy (deres kurs skal ikke muteres av demolgikken).
+    if (this._aisView !== 'live' && this._trafAcc > 15) {
       this._trafAcc = 0;
       const cpaLim = (s.cpaLimit || 0.5), tcpaLim = (s.tcpaLimit || 12);
-      for (const t of arr) {
+      for (const t of this.ais) {
         if (t._baseHdg == null) t._baseHdg = t.hdg;
         const cp = this.cpa(o, t);
         if (cp.tcpa > 0 && cp.tcpa < tcpaLim * 1.15 && cp.cpa < cpaLim * 1.6) t._avoid = Math.min(60, (t._avoid || 0) + 20);
@@ -1510,6 +1514,27 @@ class Component extends DCLogic {
       }
     }
     for (const t of arr) { if (t.sog) { const adv = live ? dt : sdt; const nd = this.moveLL(t.lat, t.lon, (t.cog != null ? t.cog : t.hdg), t.sog / 3600 * adv); t.lat = nd.lat; t.lon = nd.lon; } if (!live) { if (t.lon < B.lonMin) t.lon = B.lonMax - .02; if (t.lon > B.lonMax) t.lon = B.lonMin + .02; if (t.lat < B.latMin) t.lat = B.latMax - .02; if (t.lat > B.latMax) t.lat = B.latMin + .02; } }
+    // Sim-flaaten FOLGER eget skip: en baat som er sakket > 30 nm akterut
+    // (typisk etter "Set route to destination" langt av gaarde) respawnes
+    // 8-18 nm foran skipet med kryssende kurs — i farbart vann (dybdesjekk).
+    // Slik har demoen alltid trafikk rundt skipet uansett hvor det seiler,
+    // og radaren arver det samme bildet via mrd_ais.
+    this._fleetAcc = (this._fleetAcc || 0) + sdt;
+    if (this._fleetAcc > 5) {
+      this._fleetAcc = 0;
+      for (const t of this.ais) {
+        if (this.distNm(t, o) <= 30) continue;
+        let p = null;
+        for (let tr = 0; tr < 6 && !p; tr++) {
+          const cand = this.moveLL(o.lat, o.lon, (o.cog || 0) + (Math.random() * 120 - 60), 8 + Math.random() * 10);
+          if (this.depthAt(cand.lat, cand.lon) > 5) p = cand;
+        }
+        if (!p) continue;
+        t.lat = p.lat; t.lon = p.lon;
+        t.cog = t.hdg = t._baseHdg = ((o.cog || 0) + 100 + Math.random() * 160) % 360;
+        t._avoid = 0; t._trail = [];
+      }
+    }
     if (s.layers.trails) { for (const t of arr) { if (!t._trail) t._trail = []; const last = t._trail[t._trail.length - 1]; if (!last || this.distNm(last, t) > 0.02) { t._trail.push({ lat: t.lat, lon: t.lon }); if (t._trail.length > 50) t._trail.shift(); } } }
     if (live && this.aisLive) { const now = Date.now(); for (const k in this.aisLive) if (now - (this.aisLive[k].last || 0) > 300000) delete this.aisLive[k]; }
     if (performance.now() - (this._lastAlarmWall || 0) > 1500) { this._lastAlarmWall = performance.now(); this.checkAlarms(); }
