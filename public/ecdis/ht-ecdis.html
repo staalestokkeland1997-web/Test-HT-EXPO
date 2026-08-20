@@ -1155,12 +1155,21 @@ class Component extends DCLogic {
   tideExtremes() { const p = (this.tide && this.tide.pts) || [], ex = []; for (let i = 1; i < p.length - 1; i++) { if (p[i].v > p[i - 1].v && p[i].v >= p[i + 1].v) ex.push({ type: 'high', t: p[i].t, v: p[i].v }); else if (p[i].v < p[i - 1].v && p[i].v <= p[i + 1].v) ex.push({ type: 'low', t: p[i].t, v: p[i].v }); } return ex; }
 
   aisArr() {
-    // Varmstart: i live-modus vises sim-/sist kjente flaate helt til forste
-    // ekte posisjonsmelding er inne, ellers staar skjermen tom i minuttevis
-    // mens fartoyene rapporterer inn en og en.
+    // Varmstart + lokal blanding: i live-modus vises sim-/sist kjente flaate
+    // helt til det faktisk finnes ekte trafikk I NAEROMRAADET. Live-boksen
+    // dekker hele norskekysten, saa de forste ekte fartoyene kan ligge
+    // hundrevis av nm unna — byttet radaren/kartet til ren live for tidlig,
+    // saa demoen "dod" ut rundt eget skip. Til det er minst 3 ekte fartoy
+    // innen 60 nm vises derfor sim-flaaten sammen med de ekte som er kommet.
     if (this.state.aisMode === 'live' && this.aisLive) {
       const v = Object.values(this.aisLive).filter(t => t.lat != null);
-      if (v.length) return v;
+      if (v.length) {
+        const o = this.ownShip;
+        let near = 0;
+        for (const t of v) if (this.distNm(o, t) < 60) { near++; if (near >= 3) break; }
+        if (near >= 3) return v;
+        return this.ais.concat(v);
+      }
     }
     return this.ais;
   }
@@ -2038,7 +2047,11 @@ class Component extends DCLogic {
       // Skrives bare naar flaaten faktisk har innhold, saa en tom live-liste
       // under tilkobling ikke visker ut et brukbart bilde.
       try {
-        const fleet = (this.aisArr() || []).filter(t => t.lat != null).slice(0, 40).map(t => ({
+        // Sorter paa avstand fra eget skip for kutt ved 40: den delte cachen
+        // (og dermed radaren) skal baere fartoyene i NAEROMRAADET, ikke et
+        // vilkaarlig utvalg av hele kystens live-trafikk.
+        const fleet = (this.aisArr() || []).filter(t => t.lat != null)
+          .sort((a, b) => this.distNm(o, a) - this.distNm(o, b)).slice(0, 40).map(t => ({
           lat: t.lat, lon: t.lon, cog: (t.cog != null ? t.cog : t.hdg) || 0, sog: t.sog || 0,
           hdg: (t.hdg != null ? t.hdg : t.cog) || 0, name: t.name || '', type: t.type || 'Vessel',
           col: t.col, mmsi: t.mmsi
@@ -2070,13 +2083,17 @@ class Component extends DCLogic {
   }
   // Erstatter den genererte sim-flaaten med sist viste flaate, saa ECDIS og
   // radar viser SAMME baater ogsaa naar sidene aapnes etter hverandre.
+  // Fartoy MED mmsi horer til live-laget og varmstartes i connectAis i
+  // stedet — tas de inn her ogsaa, vises de dobbelt i blandet modus.
   loadAisState() {
     const c = this.loadAisCache();
     if (!c) return;
-    this.ais = c.targets.map(t => ({
+    const sim = c.targets.filter(t => t.mmsi == null);
+    if (!sim.length) return;
+    this.ais = sim.map(t => ({
       lat: t.lat, lon: t.lon, name: t.name || 'VESSEL', type: t.type || 'Vessel',
       hdg: (t.hdg != null ? t.hdg : t.cog) || 0, cog: (t.cog != null ? t.cog : t.hdg) || 0,
-      sog: t.sog || 0, col: t.col || '#0A84FF', dangerous: false, mmsi: t.mmsi
+      sog: t.sog || 0, col: t.col || '#0A84FF', dangerous: false
     }));
   }
   loadShipState() {
