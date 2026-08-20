@@ -1227,8 +1227,11 @@
         "<span class=\"sub\">CPA " + info.cpa.toFixed(2) + " NM · TCPA " + (info.tcpaMin != null && info.tcpaMin > 0 && info.tcpaMin < 99 ? info.tcpaMin.toFixed(1) + " MIN" : "—") + " · " + (t.sog || 0).toFixed(1) + " KN</span></div>");
     }
     if (state.ais) {
+      // Bare fartoy i skopets naerhet (4x range) — en liste full av maal
+      // hundrevis av nm unna ser ut som feil, ikke som AIS.
       var ais = targets().filter(function (x) { return x.name && !ttFor(x.name); })
         .map(function (x) { return { t: x, info: cpaMap[x.name] || evalTarget(x) }; })
+        .filter(function (x) { return x.info.rng < state.range * 4; })
         .sort(function (a, b) { return a.info.rng - b.info.rng; })
         .slice(0, Math.max(0, 5 - rows.length));
       for (i = 0; i < ais.length; i++) {
