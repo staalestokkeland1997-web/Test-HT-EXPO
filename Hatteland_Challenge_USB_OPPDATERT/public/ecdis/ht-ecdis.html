@@ -708,6 +708,7 @@ class Component extends DCLogic {
     this.loadTrack();
     this.loadRoute();
     window.__ecdis = this;
+    this.loadAisState();
     this.loadShipState();
     this._persistT = setInterval(() => { if (!document.hidden) this.saveShipState(); }, 5000);
     this._pagehideH = () => this.saveShipState(true);
@@ -878,28 +879,54 @@ class Component extends DCLogic {
   // strict (default): a sample on an UNLOADED chart tile (chartLandAt === null) counts as NOT clear, so a route is only ever accepted once its whole corridor's chart data is really loaded — this prevents committing a route computed on half-loaded tiles (undecoded cells look like water and yield phantom routes through land). lax: treat unloaded as water (best-effort, used only on the final give-up attempt).
   routeClear(R, lax) { if (!R || R.length < 2) return false; for (let i = 1; i < R.length; i++) { const a = R[i - 1], b = R[i]; const n = Math.max(2, Math.ceil(this.distNm(a, b) / 0.04)); for (let s = 0; s <= n; s++) { const f = s / n, la = a.lat + (b.lat - a.lat) * f, lo = a.lon + (b.lon - a.lon) * f; const cl = this.chartLandAt(la, lo, 12); if (cl === true) return false; if (cl == null && !lax) return false; } } return true; }
   _doPlan(dest, quiet) {
-    try {
+    // Tidsskivet planlegging: en planRoute-kandidat per makrotask i stedet for
+    // hele kaskaden i ett jafs, saa kartet kan panoreres/zoomes og alle knapper
+    // virker mens ruten beregnes. Nye kall mens en kaskade kjorer koalesceres
+    // (siste vinner) i stedet for aa stables oppaa hverandre.
+    if (this._planBusy) { this._planAgain = { dest, quiet }; return; }
+    this._planBusy = true;
+    if (!this._planWorking) { this._planWorking = true; this.setState({ routeVer: this.state.routeVer + 1 }); }
     const o = this.ownShip; const draught = this.draughtV || 7;
     const tries = [...new Set([Math.max(this.state.safetyC, draught + 1.5), draught, this.state.shallowC, 1, 0.5].filter(v => v > 0))].sort((a, b) => b - a);
-    let path = null, used = null;
-    // (cellDivisor, paddingMultiplier, dilationCells) combos. Finer grids + a few cells of land-dilation keep the route mid-channel so straight legs can't clip headlands (clean routes in open/deep fjords); the dil=0 + wider-box combos fall back for narrow channels and long winding sounds. STRICT routeClear validates every candidate against loaded chart data.
+    // (cellDivisor, paddingMultiplier, dilationCells) combos. Finer grids + a few cells of land-dilation keep the route mid-channel so straight legs can't clip headlands (clean routes in open/deep fjords); the dil=0 + wider-box combos fall back for narrow channels and long winding sounds. STRICT routeClear validates every candidate against loaded chart data; lax (unloaded tiles as water) only on the final give-up attempts.
     const combos = [[560, 1, 2], [560, 1, 0], [400, 2.0, 1], [300, 3.2, 0]];
-    for (const [dv, pk, dl] of combos) { for (const clr of tries) { const p = this.planRoute(o.lat, o.lon, dest.lat, dest.lon, clr, false, dv, pk, dl); if (p && this.routeClear(p)) { path = p; used = clr; break; } } if (path) break; }
-    // fallback: ignore AIS discs (a vessel may be sitting in the only channel)
-    if (!path) { for (const [dv, pk, dl] of combos) { for (const clr of tries) { const p = this.planRoute(o.lat, o.lon, dest.lat, dest.lon, clr, true, dv, pk, dl); if (p && this.routeClear(p)) { path = p; used = clr; break; } } if (path) break; } }
-    // final give-up attempt only: accept a best-effort route validated laxly (unloaded tiles treated as water) so a tile that never loads can't block an otherwise-good route forever.
-    if (!path && !quiet) { for (const [dv, pk, dl] of combos) { for (const clr of tries) { const p = this.planRoute(o.lat, o.lon, dest.lat, dest.lon, clr, true, dv, pk, dl); if (p && this.routeClear(p, true)) { path = p; used = clr; break; } } if (path) break; } }
-    if (!path) {
-      // quiet === true means data may still be loading and a retry is scheduled — don't flash a failure yet, just show a working status.
-      if (quiet) { if (!this._planWorking) { this._planWorking = true; this.setState({ routeVer: this.state.routeVer + 1 }); } return; }
-      this._planWorking = false; this.route = null; this.routePending = false; this.autoNav = false; this.addAlarm('warning', 'Fant ikke en trygg rute til punktet — det er sperret av land/grunner. Velg et punkt i farbart farvann.'); this.setState({ routeVer: this.state.routeVer + 1 }); return;
-    }
-    // A route that passed STRICT routeClear is validated against loaded chart data along its whole length, so it is safe to commit immediately (no separate tile-readiness gate needed).
-    this._planWorking = false;
-    this.route = path; this.activeLeg = 1; this.routeCheck = null; this.autoNav = false; this.routePending = true; this._routeClr = used;
-    this.helm = Object.assign(this.helm || {}, { active: false, ap: false });
-    this.setState({ simRunning: false, routeVer: this.state.routeVer + 1, tool: 'pan', autoOpen: true });
-    } catch (e) {}
+    const jobs = [];
+    for (const noAis of [false, true]) for (const [dv, pk, dl] of combos) for (const clr of tries) jobs.push({ dv, pk, dl, clr, noAis, lax: false });
+    if (!quiet) for (const [dv, pk, dl] of combos) for (const clr of tries) jobs.push({ dv, pk, dl, clr, noAis: true, lax: true });
+    let i = 0;
+    const chain = () => {
+      const again = this._planAgain; this._planAgain = null;
+      if (again && !this.routePending) setTimeout(() => this._doPlan(again.dest, again.quiet), 30);
+    };
+    const finish = (path, used) => {
+      this._planBusy = false;
+      if (path) {
+        // A route that passed STRICT routeClear is validated against loaded chart data along its whole length, so it is safe to commit immediately.
+        this._planWorking = false;
+        this.route = path; this.activeLeg = 1; this.routeCheck = null; this.autoNav = false; this.routePending = true; this._routeClr = used;
+        this.helm = Object.assign(this.helm || {}, { active: false, ap: false });
+        this.setState({ simRunning: false, routeVer: this.state.routeVer + 1, tool: 'pan', autoOpen: true });
+      } else if (!quiet) {
+        this._planWorking = false; this.route = null; this.routePending = false; this.autoNav = false;
+        this.addAlarm('warning', 'Fant ikke en trygg rute til punktet — det er sperret av land/grunner. Velg et punkt i farbart farvann.');
+        this.setState({ routeVer: this.state.routeVer + 1 });
+      }
+      // quiet uten treff: _planWorking blir staaende saa panelet viser "Beregner rute…" mens retry-loopen fortsetter.
+      chain();
+    };
+    const step = () => {
+      if (this._planDest !== dest || this.routePending) { this._planBusy = false; chain(); return; }
+      const t0 = performance.now();
+      while (i < jobs.length && performance.now() - t0 < 26) {
+        const j = jobs[i++];
+        let p = null;
+        try { p = this.planRoute(o.lat, o.lon, dest.lat, dest.lon, j.clr, j.noAis, j.dv, j.pk, j.dl); } catch (e) {}
+        if (p && this.routeClear(p, j.lax)) { finish(p, j.clr); return; }
+      }
+      if (i >= jobs.length) { finish(null); return; }
+      setTimeout(step, 30);
+    };
+    setTimeout(step, 0);
   }
   routeStats() { const R = this.route; if (!R || R.length < 2) return null; const o = this.ownShip; let rem = this.distNm(o, R[Math.min(this.activeLeg, R.length - 1)]); for (let i = this.activeLeg + 1; i < R.length; i++) rem += this.distNm(R[i - 1], R[i]); const total = R.reduce((a, p, i) => i ? a + this.distNm(R[i - 1], p) : 0, 0); const spd = (this.autoNav && o.sog > 0.3) ? o.sog : 14; return { rem, total, legs: R.length - 1, eta: rem / Math.max(6, spd) * 60 }; }
   startAutoNav() { if (!this.route) return; this.routePending = false; this.autoNav = true; this.helm = Object.assign(this.helm || {}, { active: false, ap: false }); this.saveRoute(); this.setState({ simRunning: true, routeVer: this.state.routeVer + 1 }); const st = this.routeStats(); this.addAlarm('info', 'Autonom seilas startet — ' + (st ? st.legs + ' legs · ' + st.total.toFixed(1) + ' nm · ≥ ' + (this._routeClr || this.state.safetyC).toFixed(0) + ' m UKC · ETA ~' + Math.round(st.eta) + ' min.' : 'styrer mot mål.')); }
@@ -1127,12 +1154,31 @@ class Component extends DCLogic {
   tideNow() { const T = this.tide; if (!T || !T.pts.length) return null; const p = T.pts, now = Date.now(); if (now <= p[0].t) return { v: p[0].v, rate: 1 }; for (let i = 1; i < p.length; i++) { if (now <= p[i].t) { const f = (now - p[i - 1].t) / (p[i].t - p[i - 1].t || 1); return { v: p[i - 1].v + (p[i].v - p[i - 1].v) * f, rate: p[i].v - p[i - 1].v }; } } return { v: p[p.length - 1].v, rate: -1 }; }
   tideExtremes() { const p = (this.tide && this.tide.pts) || [], ex = []; for (let i = 1; i < p.length - 1; i++) { if (p[i].v > p[i - 1].v && p[i].v >= p[i + 1].v) ex.push({ type: 'high', t: p[i].t, v: p[i].v }); else if (p[i].v < p[i - 1].v && p[i].v <= p[i + 1].v) ex.push({ type: 'low', t: p[i].t, v: p[i].v }); } return ex; }
 
-  aisArr() { return this.state.aisMode === 'live' && this.aisLive ? Object.values(this.aisLive).filter(t => t.lat != null) : this.ais; }
+  aisArr() {
+    // Varmstart: i live-modus vises sim-/sist kjente flaate helt til forste
+    // ekte posisjonsmelding er inne, ellers staar skjermen tom i minuttevis
+    // mens fartoyene rapporterer inn en og en.
+    if (this.state.aisMode === 'live' && this.aisLive) {
+      const v = Object.values(this.aisLive).filter(t => t.lat != null);
+      if (v.length) return v;
+    }
+    return this.ais;
+  }
   aisColor(id) { const c = ['#0A84FF', '#34C759', '#FF9F0A', '#BF5AF2', '#FF375F', '#30B0C7', '#FFD60A']; return c[Math.abs(id | 0) % c.length]; }
   shipTypeName(c) { if (c == null) return 'Vessel'; if (c >= 60 && c <= 69) return 'Passenger'; if (c >= 70 && c <= 79) return 'Cargo'; if (c >= 80 && c <= 89) return 'Tanker'; if (c >= 40 && c <= 49) return 'HSC'; if (c === 30) return 'Fishing'; if (c === 35) return 'Military'; if (c === 36) return 'Sailing'; if (c === 37) return 'Pleasure'; if (c === 50) return 'Pilot'; if (c === 51) return 'SAR'; if (c === 52) return 'Tug'; return 'Vessel'; }
   connectAis(key) {
     this.disconnectAis(); key = (key || '').trim(); if (!key) { this.setState({ aisMode: 'sim', aisStatus: 'off' }); return; }
     this.aisKey = key; this.aisLive = {}; const B = this.aisBox || this.bbox;
+    // Varmstart fra siste lagrede AIS-bilde: skjermen er befolket med sist
+    // kjente (ekte) fartoy umiddelbart, dodregnet frem. Ekte meldinger tar
+    // over per MMSI; fartoy som ikke lenger sender prunes av 5-min-regelen.
+    try {
+      const c = this.loadAisCache();
+      if (c && c.mode === 'live') for (const t of c.targets) {
+        if (t.mmsi == null || t.lat == null) continue;
+        this.aisLive[t.mmsi] = { mmsi: t.mmsi, name: t.name || ('MMSI ' + t.mmsi), type: t.type || 'Vessel', col: t.col || this.aisColor(t.mmsi), lat: t.lat, lon: t.lon, cog: t.cog || 0, sog: t.sog || 0, hdg: (t.hdg != null ? t.hdg : t.cog) || 0, last: Date.now() - 60000 };
+      }
+    } catch (e) {}
     try {
       const ws = new WebSocket('wss://stream.aisstream.io/v0/stream'); this.aisWs = ws;
       ws.onopen = () => { ws.send(JSON.stringify({ APIKey: key, BoundingBoxes: [[[B.latMin, B.lonMin], [B.latMax, B.lonMax]]], FilterMessageTypes: ['PositionReport', 'ShipStaticData'] })); this._aisKeyInput = key; this.saveSrcCfg(); this.setState({ aisStatus: 'connected', aisMode: 'live' }); };
@@ -1988,11 +2034,50 @@ class Component extends DCLogic {
         ui: { palette: s.palette, base: s.base, orient: s.orient, displayCat: s.displayCat, layers: s.layers, followShip: s.followShip, rightTab: s.rightTab, rightOpen: s.rightOpen }
       };
       localStorage.setItem('mrd_ship', JSON.stringify(snap));
+      // AIS-bildet deles med radarsiden (og neste oppstart) via mrd_ais.
+      // Skrives bare naar flaaten faktisk har innhold, saa en tom live-liste
+      // under tilkobling ikke visker ut et brukbart bilde.
+      try {
+        const fleet = (this.aisArr() || []).filter(t => t.lat != null).slice(0, 40).map(t => ({
+          lat: t.lat, lon: t.lon, cog: (t.cog != null ? t.cog : t.hdg) || 0, sog: t.sog || 0,
+          hdg: (t.hdg != null ? t.hdg : t.cog) || 0, name: t.name || '', type: t.type || 'Vessel',
+          col: t.col, mmsi: t.mmsi
+        }));
+        if (fleet.length) localStorage.setItem('mrd_ais', JSON.stringify({ savedAt: Date.now(), mode: s.aisMode, targets: fleet }));
+      } catch (e) {}
       this.persistTrack();
       const doc = JSON.stringify({ ship: snap, route: this.route && this.route.length ? { route: this.route, channel: this.channel, activeLeg: this.activeLeg } : null });
       if (unloading && navigator.sendBeacon) navigator.sendBeacon('/api/ecdis-state', new Blob([doc], { type: 'application/json' }));
       else fetch('/api/ecdis-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: doc, keepalive: !!unloading }).catch(() => {});
     } catch (e) {}
+  }
+  // Siste lagrede AIS-bilde (fra denne eller radarsiden), dodregnet frem
+  // etter veggklokken (maks 20 min) saa posisjonene er plausible.
+  loadAisCache() {
+    try {
+      const raw = localStorage.getItem('mrd_ais'); if (!raw) return null;
+      const c = JSON.parse(raw);
+      if (!c || !c.savedAt || !c.targets || !c.targets.length) return null;
+      const age = (Date.now() - c.savedAt) / 1000;
+      if (age > 3600) return null;
+      const adv = Math.min(age, 1200);
+      const targets = c.targets.filter(t => t && t.lat != null).map(t => {
+        const p = (t.sog > 0.2 && t.cog != null) ? this.moveLL(t.lat, t.lon, t.cog, t.sog * adv / 3600) : t;
+        return Object.assign({}, t, { lat: p.lat, lon: p.lon });
+      });
+      return targets.length ? { mode: c.mode || 'sim', savedAt: c.savedAt, targets } : null;
+    } catch (e) { return null; }
+  }
+  // Erstatter den genererte sim-flaaten med sist viste flaate, saa ECDIS og
+  // radar viser SAMME baater ogsaa naar sidene aapnes etter hverandre.
+  loadAisState() {
+    const c = this.loadAisCache();
+    if (!c) return;
+    this.ais = c.targets.map(t => ({
+      lat: t.lat, lon: t.lon, name: t.name || 'VESSEL', type: t.type || 'Vessel',
+      hdg: (t.hdg != null ? t.hdg : t.cog) || 0, cog: (t.cog != null ? t.cog : t.hdg) || 0,
+      sog: t.sog || 0, col: t.col || '#0A84FF', dangerous: false, mmsi: t.mmsi
+    }));
   }
   loadShipState() {
     try {
