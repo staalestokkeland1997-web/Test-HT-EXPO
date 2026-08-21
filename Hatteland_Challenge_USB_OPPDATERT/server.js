@@ -2,6 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { KystverketAis } = require("./lib/ais-kystverket");
 
 const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
@@ -501,7 +502,16 @@ function publicConfig(config) {
     theme: config.theme,
     // API-nokler for innebygde demoer (f.eks. aisstream.io for HT ECDIS).
     // Disse brukes av klienten direkte og er derfor bevisst i public config.
-    apiKeys: config.apiKeys || {}
+    apiKeys: config.apiKeys || {},
+    // AIS-kilder for HT ECDIS. Klienten viser en velger basert paa denne.
+    ais: {
+      source: (config.ais && config.ais.source) || "auto",
+      kystverket: {
+        enabled: !(config.ais && config.ais.enabled === false),
+        host: (config.ais && config.ais.host) || "153.44.253.27",
+        port: (config.ais && Number(config.ais.port)) || 5631
+      }
+    }
   };
 }
 
@@ -1177,12 +1187,89 @@ function handleProxy(request, response, query) {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Kystverkets aapne AIS-stroem
+// ---------------------------------------------------------------------------
+// Kystverket leverer raa NMEA over TCP, som en nettleser ikke kan snakke med.
+// Serveren holder EN oppkobling og deler den ut til alle faner - det er
+// nettopp der den slaar aisstream.io, der en gratisnokkel bare tillater en
+// samtidig tilkobling og ECDIS + radar derfor slaass om plassen.
+// Stroemmen kobles opp forst naar noen faktisk ber om data, og legger paa
+// igjen naar ingen har spurt paa en stund.
+
+let aisBridge = null;
+
+function aisConfig() {
+  const cfg = loadConfig();
+  const a = (cfg && cfg.ais) || {};
+  return {
+    enabled: a.enabled !== false,
+    host: a.host || "153.44.253.27",
+    port: Number(a.port) || 5631
+  };
+}
+
+function getAisBridge() {
+  const cfg = aisConfig();
+  if (!cfg.enabled) return null;
+  if (aisBridge && (aisBridge.opt.host !== cfg.host || aisBridge.opt.port !== cfg.port)) {
+    aisBridge.stop("konfigurasjon endret");
+    aisBridge = null;
+  }
+  if (!aisBridge) aisBridge = new KystverketAis({ host: cfg.host, port: cfg.port });
+  return aisBridge;
+}
+
+function parseBox(raw) {
+  if (!raw) return null;
+  const p = String(raw).split(",").map(Number);
+  if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return null;
+  return {
+    latMin: Math.min(p[0], p[2]), lonMin: Math.min(p[1], p[3]),
+    latMax: Math.max(p[0], p[2]), lonMax: Math.max(p[1], p[3])
+  };
+}
+
+function handleAis(request, response, url) {
+  const cors = { "Access-Control-Allow-Origin": "*" };
+  const bridge = getAisBridge();
+
+  if (!bridge) {
+    sendJson(response, 503, { error: "Kystverket-kilden er slaatt av i config (ais.enabled).", state: "off" });
+    return;
+  }
+
+  if (url.pathname === "/ais/status") {
+    bridge.touch();
+    response.writeHead(200, { ...cors, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    response.end(JSON.stringify(bridge.status()));
+    return;
+  }
+
+  if (url.pathname === "/ais/targets") {
+    bridge.touch();
+    const box = parseBox(url.searchParams.get("bbox"));
+    const atons = url.searchParams.get("atons") === "1";
+    const snap = bridge.snapshot(box, atons);
+    response.writeHead(200, { ...cors, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    response.end(JSON.stringify(snap));
+    return;
+  }
+
+  sendJson(response, 404, { error: "Ukjent AIS-endepunkt." });
+}
+
 const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url, "http://localhost");
 
     if (url.pathname.startsWith("/api/")) {
       await handleApi(request, response, url);
+      return;
+    }
+
+    if (url.pathname.startsWith("/ais/")) {
+      handleAis(request, response, url);
       return;
     }
 

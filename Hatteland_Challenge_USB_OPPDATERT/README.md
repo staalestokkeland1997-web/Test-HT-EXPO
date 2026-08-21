@@ -25,7 +25,17 @@ I tillegg:
 - Harbor Rush detaljadmin: `/admin-rush.html`.
 - Bridge Duel detaljadmin: `/admin-duel.html`.
 - HT ECDIS er en innebygd sjokart-demonstrator (fra HT-S100-Demo): ekte norske
-  sjokart, vaer og ruteplanlegging. Krever internett for kartfliser; UI-et selv
+  sjokart, vaer og ruteplanlegging. Vindlaget folger yr sitt uttrykk: en jevn,
+  sammenhengende fargeflate paa yr sin m/s-skala med hvite stromlinjer oppaa,
+  og en staaende tegnforklaring med tallmerker nede til venstre. I tillegg
+  ligger symbolspraaket fra ekte bro- og vaerkart over: meteorologiske vindfjaer
+  (halv fjaer 5 kt, hel 10, vimpel 50) med farten i m/s, stromspiler med fart i
+  knop, og doenning som boelgekam med retning og signifikant boelgehoyde.
+  Bare ETT lag males som farget flate om gangen (nedbor > temperatur > strom >
+  vind) - resten vises som symboler, saa kartet ikke drukner naar flere lag
+  staar paa. Feltene bygges i lav opplosning og slores for de skaleres opp, saa
+  overgangene er myke i stedet for firkantete, og partikkelsporene tegnes som
+  kurver med fart maalt i piksler - da er streken like lang uansett zoom. Krever internett for kartfliser; UI-et selv
   starter offline. Serveren har en `/proxy` (streng allowlist) som appen bruker
   for MET/yr og Kartverket tidevann. "Main kiosk"-knappen nede til venstre gaar
   tilbake til spillvelgeren. DEMO - ikke for navigasjon.
@@ -158,10 +168,37 @@ Viktige seksjoner i `contest-config.json`:
 - `sonarGame`: Sonar Sequence settings (antall kontakter, tempo, svartid).
 - `brand`: navn, logo, premie og lenker.
 - `admin.password`: passord for adminsidene.
+- `ais`: AIS-kilde for HT ECDIS. Tre valg i "Live sources"-panelet:
+
+  | Kilde | Nokkel | Flere faner samtidig | Dekning |
+  | --- | --- | --- | --- |
+  | Simulert | nei | ja | fast demoflaate |
+  | Kystverket | nei | ja | norskekysten, 40-60 nm ut |
+  | aisstream.io | ja | **nei** (kun EN paa gratisnokkel) | global, men tynn i norske fjorder |
+
+  `ais.source` styrer hva som velges ved oppstart: `auto` (standard) prover
+  Kystverket forst og faller tilbake til aisstream hvis stroemmen ikke svarer
+  innen noen sekunder. `sim`, `kystverket` eller `aisstream` laaser valget.
+  `ais.host`/`ais.port` peker paa Kystverkets aapne stroem (153.44.253.27:5631)
+  og `ais.enabled: false` skrur kilden helt av.
+
+  Kystverket kringkaster raa NMEA (AIVDM) over TCP, som en nettleser ikke kan
+  snakke med. Serveren holder derfor **en** oppkobling, dekoder meldingene og
+  deler dem ut paa `/ais/targets` og `/ais/status` - det er grunnen til at
+  ECDIS og radar kan staa aapne samtidig, i motsetning til aisstream. Dataene
+  er gratis under NLOD; den aapne stroemmen utelater fiskefartoy under 15 m og
+  fritidsbaater under 45 m.
+
+  **Sjekk paa messe-PC-en for standen aapner:** port 5631 er ikke 80/443, og
+  gjestenett sperrer den ofte. Bruk "Test tilkobling" i kildepanelet, eller:
+
+  ```bash
+  node -e "require('net').connect(5631,'153.44.253.27',function(){console.log('OK')}).on('error',e=>console.log('BLOKKERT',e.code))"
+  ```
+
 - `apiKeys`: API-nokler for innebygde demoer. `apiKeys.aisstream` brukes av
-  HT ECDIS som standardnokkel for live AIS (ekte skip i kartet) - appen
-  kobler til automatisk ved oppstart. En nokkel lagt inn manuelt i appens
-  "Live sources"-panel har forrang. `apiKeys.arcgis` (ArcGIS API key med
+  HT ECDIS naar aisstream er valgt som AIS-kilde. En nokkel lagt inn manuelt i
+  appens "Live sources"-panel har forrang. `apiKeys.arcgis` (ArcGIS API key med
   Location services > Basemaps + Geocoding) laaser opp tre ting i ECDIS:
   Flyfoto-basemappet (Esri World Imagery), Ocean-basemappet (Esri World
   Ocean Base med GEBCO/NOAA-bathymetri) og stedssoket oppe til venstre
