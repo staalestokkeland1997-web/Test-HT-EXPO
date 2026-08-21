@@ -25,13 +25,17 @@ I tillegg:
 - Harbor Rush detaljadmin: `/admin-rush.html`.
 - Bridge Duel detaljadmin: `/admin-duel.html`.
 - HT ECDIS er en innebygd sjokart-demonstrator (fra HT-S100-Demo): ekte norske
-  sjokart, vaer og ruteplanlegging. Vaerlagene bruker samme symbolspraak som
-  ekte bro-/vaerkart: meteorologiske vindfjaer (halv fjaer 5 kt, hel 10, vimpel
-  50) med farten i m/s, stromspiler med fart i knop, og doenning som boelgekam
-  med retning og signifikant boelgehoyde. Bare ETT lag males som farget flate om
-  gangen (nedbor > temperatur > strom > vind) - resten vises som symboler, saa
-  kartet ikke drukner naar flere lag staar paa. Tegnforklaringen nede til
-  venstre viser skalaene for de aktive lagene. Krever internett for kartfliser; UI-et selv
+  sjokart, vaer og ruteplanlegging. Vindlaget folger yr sitt uttrykk: en jevn,
+  sammenhengende fargeflate paa yr sin m/s-skala med hvite stromlinjer oppaa,
+  og en staaende tegnforklaring med tallmerker nede til venstre. I tillegg
+  ligger symbolspraaket fra ekte bro- og vaerkart over: meteorologiske vindfjaer
+  (halv fjaer 5 kt, hel 10, vimpel 50) med farten i m/s, stromspiler med fart i
+  knop, og doenning som boelgekam med retning og signifikant boelgehoyde.
+  Bare ETT lag males som farget flate om gangen (nedbor > temperatur > strom >
+  vind) - resten vises som symboler, saa kartet ikke drukner naar flere lag
+  staar paa. Feltene bygges i lav opplosning og slores for de skaleres opp, saa
+  overgangene er myke i stedet for firkantete, og partikkelsporene tegnes som
+  kurver med fart maalt i piksler - da er streken like lang uansett zoom. Krever internett for kartfliser; UI-et selv
   starter offline. Serveren har en `/proxy` (streng allowlist) som appen bruker
   for MET/yr og Kartverket tidevann. "Main kiosk"-knappen nede til venstre gaar
   tilbake til spillvelgeren. DEMO - ikke for navigasjon.
