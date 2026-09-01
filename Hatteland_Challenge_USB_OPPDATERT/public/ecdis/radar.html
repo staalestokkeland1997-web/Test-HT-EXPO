@@ -116,7 +116,16 @@
     .panel { width: 236px; }
     #scope { right: 236px; }
   }
+  /* Telefon: kontrollpanelet legges som et rullbart bunnark over full bredde,
+     og skopet faar hele bredden over. resize() nullstiller scope-kantene. */
+  html.mob .panel {
+    left: 0; right: 0; top: auto; bottom: 0; width: auto; height: 44vh;
+    border-left: none; border-top: 1px solid var(--bd);
+  }
+  html.mob #scope { right: 0; }
 </style>
+<script src="/kiosk-lock.js"></script>
+<script src="/fullscreen.js" defer></script>
 </head>
 <body>
 <canvas id="scope"></canvas>
@@ -254,59 +263,187 @@
   function loadJson(key) { try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (e) { return null; } }
 
   var route = DEFAULT_ROUTE;
-  var savedRoute = loadJson("mrd_route");
-  if (savedRoute && savedRoute.route && savedRoute.route.length > 1) route = savedRoute.route;
+  function adoptRoute(r) {
+    if (r && r.route && r.route.length > 1) route = r.route;
+  }
+  adoptRoute(loadJson("mrd_route"));
 
   var own = { lat: route[0].lat, lon: route[0].lon, hdg: bearingDeg(route[0], route[1]), cog: 0, sog: CRUISE, leg: 1 };
   own.cog = own.hdg;
+  var cruiseSog = CRUISE;               // farten solo-dodregningen soker mot
+  var soloSail = true;                  // gikk ECDIS langs rute sist vi hoerte fra den?
+  var everSynced = false;               // har vi noen gang sett ECDIS-tilstand?
 
-  (function restore() {
-    var snap = loadJson("mrd_ship");
-    if (!snap || !snap.ship || !snap.savedAt) return;
-    own.lat = snap.ship.lat; own.lon = snap.ship.lon;
-    own.hdg = snap.ship.hdg || own.hdg; own.cog = snap.ship.cog || own.hdg;
-    own.sog = snap.sailing ? Math.max(6, Math.min(16, snap.ship.sog || CRUISE)) : (snap.ship.sog || 0);
-    own.leg = Math.max(1, Math.min(snap.activeLeg || 1, route.length - 1));
-    var seconds = (Date.now() - snap.savedAt) / 1000;
-    if (!snap.sailing || route.length < 2 || seconds < 20) return;
+  // ANKERET er ECDIS' egen skipstilstand - ikke radarens gjetning. Det holder
+  // posisjonen ECDIS sist meldte, fort frem til NAA. Alt radaren tegner maales
+  // mot `own`, som glir mykt inn paa ankeret; da hopper ikke hele bildet
+  // (land, ekko, AIS) hver gang et nytt snapshot lander.
+  var anchor = null;                    // {lat,lon,hdg,cog,sog,sim,leg,legKnown,at,srcAt}
+  var snapSeen = {};                    // siste savedAt per kilde - mot dobbeltadopsjon
+  var FOLLOW_MS = 20000;                // hvor lenge et anker foelges for radaren seiler selv
+  function syncAgeMs() { return anchor ? Date.now() - anchor.srcAt : Infinity; }
+  function following() { return syncAgeMs() < FOLLOW_MS; }
+
+  // Samme regnestykke som ECDIS' deadReckonAlongRoute - inkludert dens
+  // fartsklamring - slik at et gammelt snapshot lander paa NOYAKTIG samme
+  // punkt paa begge skjermene naar de gjenopptar seilasen hver for seg.
+  function drAlongRoute(s, seconds) {
+    if (route.length < 2) return;
     var legLen = [], total = 0, i;
     for (i = 1; i < route.length; i++) { var d = distNm(route[i - 1], route[i]); legLen.push(d); total += d; }
     if (total < 0.1) return;
+    var sogDr = Math.max(6, Math.min(16, s.sog || CRUISE));
     var pos = 0;
-    for (i = 1; i < own.leg; i++) pos += legLen[i - 1];
-    var legD = legLen[own.leg - 1] || 0.0001;
-    pos += Math.max(0, Math.min(legD, legD - distNm(own, route[own.leg])));
-    var dist = (pos + own.sog * seconds / 3600) % total;
+    for (i = 1; i < s.leg; i++) pos += legLen[i - 1];
+    var legD = legLen[s.leg - 1] || 0.0001;
+    pos += Math.max(0, Math.min(legD, legD - distNm(s, route[s.leg])));
+    var dist = (pos + sogDr * seconds / 3600) % total;
     var acc = 0, li = 1;
     for (; li < route.length - 1; li++) { if (acc + legLen[li - 1] >= dist) break; acc += legLen[li - 1]; }
     var fa = route[li - 1], fb = route[li];
     var f = Math.max(0, Math.min(1, (dist - acc) / (legLen[li - 1] || 1)));
-    own.lat = fa.lat + (fb.lat - fa.lat) * f;
-    own.lon = fa.lon + (fb.lon - fa.lon) * f;
-    own.hdg = own.cog = bearingDeg(fa, fb);
-    own.sog = CRUISE; own.leg = li;
-  })();
+    s.lat = fa.lat + (fb.lat - fa.lat) * f;
+    s.lon = fa.lon + (fb.lon - fa.lon) * f;
+    s.hdg = s.cog = bearingDeg(fa, fb);
+    s.sog = sogDr; s.leg = li; s.legKnown = true;
+  }
+
+  // Adopterer et skips-snapshot fra ECDIS og forer det frem til NAA.
+  // `ageMs` er hvor gammelt snapshotet er MAALT UAVHENGIG av radarens egen
+  // klokke: serveren stempler bade lagringen og svaret, saa to maskiner med
+  // ulik klokke likevel lander paa samme posisjon. Uten dette laa radaren
+  // permanent 5-10 sekunder bak kartet og rykket bakover ved hver synk.
+  // Korte hull dodregnes langs meldt COG (det er samme bevegelse ECDIS selv
+  // gjor over noen sekunder); lange hull dodregnes langs ruten.
+  function adoptShip(snap, ageMs, src) {
+    if (!snap || !snap.ship || !snap.savedAt) return false;
+    if (snap.ship.lat == null || snap.ship.lon == null) return false;
+    if (!isFinite(snap.ship.lat) || !isFinite(snap.ship.lon)) return false;
+    src = src || "local";
+    if (snap.savedAt <= (snapSeen[src] || 0)) return false;   // samme snapshot igjen
+    snapSeen[src] = snap.savedAt;
+    var age = isFinite(ageMs) ? ageMs : (Date.now() - snap.savedAt);
+    if (!(age >= 0) || age > 12 * 3600e3) age = 0;            // vill klokkeforskjell: bruk posisjonen som den er
+    var takenAt = Date.now() - age;
+    if (anchor && takenAt <= anchor.srcAt + 250) return false; // vi foelger allerede noe ferskere
+
+    var hdg = snap.ship.hdg != null ? snap.ship.hdg : own.hdg;
+    var s = {
+      lat: snap.ship.lat, lon: snap.ship.lon,
+      hdg: hdg, cog: snap.ship.cog != null ? snap.ship.cog : hdg,
+      sog: Math.max(0, snap.ship.sog || 0),
+      // ECDIS kan kjore simuleringen 8x eller 30x. Uten denne faktoren
+      // krypet radaren mens kartet fos avgaarde, og synken ble et hopp.
+      sim: Math.max(1, Math.min(60, snap.simSpeed || 1)),
+      leg: Math.max(1, Math.min(snap.activeLeg || 1, Math.max(1, route.length - 1))),
+      legKnown: !!snap.activeLeg,
+      at: Date.now(), srcAt: takenAt
+    };
+    soloSail = !!snap.sailing;
+    cruiseSog = snap.sailing ? Math.max(4, Math.min(20, s.sog || CRUISE)) : s.sog;
+    var seconds = age / 1000;
+    if (snap.sailing && route.length > 1 && seconds > 20) drAlongRoute(s, seconds);
+    else if (s.sog > 0.05 && seconds > 0) {
+      var st = moveLL(s.lat, s.lon, s.cog, s.sog * s.sim * seconds / 3600);
+      s.lat = st.lat; s.lon = st.lon;
+    }
+    anchor = s;
+    own.leg = s.leg;
+    if (!everSynced) {
+      everSynced = true;
+      own.lat = s.lat; own.lon = s.lon; own.hdg = s.hdg; own.cog = s.cog; own.sog = s.sog;
+    }
+    return true;
+  }
+  adoptShip(loadJson("mrd_ship"), null, "local");
 
   var live = null, liveAt = 0, liveTargets = null, liveTargetsAt = 0;
   try {
     var chan = new BroadcastChannel("meridian-helm");
     chan.onmessage = function (e) {
       var m = e.data;
-      if (!m || m.type !== "state" || !m.ship) return;
+      if (!m || m.type !== "state" || !m.ship || m.ship.lat == null) return;
       live = m.ship; liveAt = Date.now();
-      // Adopter ECDIS' maalliste ogsaa naar den er tom — radaren skal speile
-      // ECDIS eksakt saa lenge den siden er aapen og sender.
-      if (m.targets) { liveTargets = m.targets; liveTargetsAt = Date.now(); }
+      // ECDIS' maalliste er ogsaa EKTE AIS (den har ingen simulert flaate),
+      // og brukes bare naar radarens egen henting er torr - typisk naar ECDIS
+      // kjorer paa aisstream.io, der gratisnokkelen tillater EN tilkobling og
+      // radaren derfor ikke kan koble seg opp selv. Disse posisjonene er
+      // NOYAKTIG dem kartet tegner, og roeres derfor aldri av radaren.
+      if (m.targets && m.targets.length) { liveTargets = m.targets; liveTargetsAt = Date.now(); }
     };
   } catch (e) {}
 
-  function ownTick(dt) {
-    if (live && Date.now() - liveAt < 4000) {
-      own.lat = live.lat; own.lon = live.lon;
-      own.hdg = live.hdg; own.cog = live.cog; own.sog = live.sog;
+  // Server-synk: radaren viser samme seilas som ECDIS ogsaa naar ECDIS kjorer
+  // paa en annen skjerm/maskin eller nettopp ble lukket - /api/ecdis-state
+  // polles hvert 5. sekund. Svaret baerer serverens egne tidsstempler, saa
+  // snapshotets alder maales i EN klokke og radaren kan fore det frem til naa
+  // i stedet for aa tegne en gammel posisjon. storage-hendelser gir umiddelbar
+  // synk fra ECDIS i samme nettleserprofil; er ECDIS aapen i samme nettleser
+  // overtar BroadcastChannel. AIS-maalene er ikke med her - de hentes fra
+  // stroemmen direkte.
+  // Samme nokkel som ECDIS, regnet ut ETT sted (kiosk.js) slik at de to
+  // skjermene ikke kan drifte fra hverandre naar de aapnes ulikt.
+  var STATE_URL = window.htEcdisStateUrl ? window.htEcdisStateUrl() : "/api/ecdis-state";
+
+  function pollServer() {
+    if (document.hidden) return;
+    var t0 = Date.now();
+    fetch(STATE_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (st) {
+      if (!st) return;
+      if (st.route) adoptRoute(st.route);
+      if (!st.ship) return;
+      if (live && Date.now() - liveAt < 4000) return;
+      var age = (st.serverNow && st.serverSavedAt)
+        ? (st.serverNow - st.serverSavedAt) + (Date.now() - t0)   // ren serverklokke + tiden svaret brukte hit
+        : (Date.now() - (st.ship.savedAt || Date.now()));
+      adoptShip(st.ship, age, "server");
+    }).catch(function () {});
+  }
+  pollServer();
+  setInterval(pollServer, 5000);
+  window.addEventListener("storage", function (e) {
+    if (!e || !e.key) return;
+    if (e.key === "mrd_ship") adoptShip(loadJson("mrd_ship"), null, "local");
+    else if (e.key === "mrd_route") adoptRoute(loadJson("mrd_route"));
+  });
+
+  // Ankeret dodregnes videre mellom snapshots langs den kursen og farten ECDIS
+  // meldte - ikke langs radarens egen rutestyring, som har en annen fysikk enn
+  // ECDIS og derfor drev fra hverandre mellom hver synk.
+  function stepAnchor(dt) {
+    var a = anchor; if (!a) return;
+    a.at = Date.now();
+    if (a.sog <= 0.05) return;
+    var st = moveLL(a.lat, a.lon, a.cog, a.sog * (a.sim || 1) * dt / 3600);
+    a.lat = st.lat; a.lon = st.lon;
+  }
+  // `own` dodregnes likt og trekkes samtidig mot ankeret. Da ligger den aldri
+  // systematisk etter, og en korreksjon glir inn i stedet for aa rykke. Ekte
+  // posisjonshopp (over 0.25 nm) foelges umiddelbart.
+  function convergeOwn(dt) {
+    var a = anchor;
+    if (own.sog > 0.05) {
+      var st = moveLL(own.lat, own.lon, own.cog, own.sog * (a.sim || 1) * dt / 3600);
+      own.lat = st.lat; own.lon = st.lon;
+    }
+    var k = 1 - Math.exp(-dt / 0.5);
+    if (distNm(own, a) > 0.25) { own.lat = a.lat; own.lon = a.lon; }
+    else { own.lat += (a.lat - own.lat) * k; own.lon += (a.lon - own.lon) * k; }
+    own.hdg = (own.hdg + (((a.hdg - own.hdg + 540) % 360) - 180) * k + 360) % 360;
+    own.cog = (own.cog + (((a.cog - own.cog + 540) % 360) - 180) * k + 360) % 360;
+    own.sog += (a.sog - own.sog) * k;
+    own.leg = a.leg;
+  }
+  // Ingen ECDIS i naerheten: radaren seiler demoruten selv, som for. Meldte
+  // ECDIS sist at den IKKE gikk paa rute (handstyring, GPS, stoppet), holdes
+  // siste kurs i stedet for aa styre mot et veipunkt kartet ikke sikter mot.
+  function soloTick(dt) {
+    if (own.sog < 0.2) return;
+    if (!soloSail || route.length < 2) {
+      var s0 = moveLL(own.lat, own.lon, own.cog, own.sog * dt / 3600);
+      own.lat = s0.lat; own.lon = s0.lon;
       return;
     }
-    if (own.sog < 0.2) return;
     var wp = route[own.leg];
     if (!wp) { own.leg = 1; return; }
     var brg = bearingDeg(own, wp);
@@ -314,7 +451,7 @@
     var rate = Math.min(3.2, Math.abs(diff)) * Math.sign(diff);
     own.hdg = (own.hdg + rate * dt + 360) % 360;
     own.cog = own.hdg;
-    own.sog += (CRUISE - own.sog) * Math.min(1, dt * 0.25);
+    own.sog += (Math.max(0.2, cruiseSog) - own.sog) * Math.min(1, dt * 0.25);
     var step = moveLL(own.lat, own.lon, own.hdg, own.sog * dt / 3600);
     own.lat = step.lat; own.lon = step.lon;
     if (distNm(own, wp) < 0.16) {
@@ -326,105 +463,383 @@
     }
   }
 
-  // ================= AIS-maal: SAMME bilde som ECDIS =================
-  // ECDIS lagrer flaaten sin (sim eller live) i mrd_ais hvert 5. sekund.
-  // Radaren leser samme bilde og dodregner det fremover, saa begge skjermene
-  // viser de samme baatene ogsaa naar sidene aapnes etter hverandre. Uten
-  // cache (forste boot) seedes NOYAKTIG samme flaate som ECDIS genererer.
-  var simTargets = [];
-  var cacheMode = "sim";
-  // Leser mrd_ais og dodregner baatene frem etter veggklokken (maks 20 min).
-  function fleetFromCache() {
-    var cache = loadJson("mrd_ais");
-    if (!(cache && cache.savedAt && cache.targets && cache.targets.length && Date.now() - cache.savedAt < 3600e3)) return null;
-    var adv = Math.min((Date.now() - cache.savedAt) / 1000, 1200);
-    var out = [];
-    for (var i = 0; i < cache.targets.length; i++) {
-      var t = cache.targets[i];
-      if (!t || t.lat == null) continue;
-      var cog = t.cog != null ? t.cog : t.hdg || 0;
-      var p = t.sog > 0.2 ? moveLL(t.lat, t.lon, cog, t.sog * adv / 3600) : t;
-      out.push({ name: t.name || "VESSEL", lat: p.lat, lon: p.lon, cog: cog, sog: t.sog || 0, hdg: t.hdg != null ? t.hdg : cog, type: t.type, col: t.col, mmsi: t.mmsi });
+  function ownTick(dt) {
+    // 1) ECDIS aapen i samme nettleser: direktesendt tilstand hvert 140 ms.
+    if (live && Date.now() - liveAt < 4000) {
+      var hdg = live.hdg != null ? live.hdg : own.hdg;
+      anchor = {
+        lat: live.lat, lon: live.lon, hdg: hdg,
+        cog: live.cog != null ? live.cog : hdg,
+        sog: Math.max(0, live.sog || 0),
+        sim: Math.max(1, Math.min(60, live.sim || 1)),
+        leg: own.leg, legKnown: false, at: liveAt, srcAt: liveAt
+      };
+      own.lat = anchor.lat; own.lon = anchor.lon;
+      own.hdg = anchor.hdg; own.cog = anchor.cog; own.sog = anchor.sog;
+      everSynced = true;
+      return;
     }
-    if (!out.length) return null;
-    cacheMode = cache.mode || cacheMode;
-    return out;
+    // 2) Fersk ECDIS-tilstand fra serveren: foelg ankeret.
+    if (following()) { stepAnchor(dt); convergeOwn(dt); return; }
+    // 3) Ingen ECDIS: radaren seiler selv.
+    soloTick(dt);
   }
-  (function seedTargets() {
-    simTargets = fleetFromCache() || [];
-    if (!simTargets.length) {
-      // Samme startflaate som ECDIS' initShip() — navn, posisjon, kurs, fart, type, farge.
-      var FLEET = [
-        [60.18, 5.00, "NORDIC STAR", 245, 12.5, "Cargo", "#0A84FF"], [60.05, 5.05, "BERGEN PEARL", 30, 22, "HSC", "#34C759"],
-        [59.80, 4.78, "GAS PIONEER", 150, 11, "Tanker", "#FF9F0A"], [59.40, 5.10, "HAVFISK", 95, 5.5, "Fishing", "#BF5AF2"],
-        [60.33, 4.85, "FJORD PILOT", 200, 14, "Pilot", "#FF375F"], [59.55, 4.62, "STENA LINK", 75, 18, "Ro-Ro", "#30B0C7"]
-      ];
-      for (var f = 0; f < FLEET.length; f++) {
-        simTargets.push({ lat: FLEET[f][0], lon: FLEET[f][1], name: FLEET[f][2], cog: FLEET[f][3], hdg: FLEET[f][3], sog: FLEET[f][4], type: FLEET[f][5], col: FLEET[f][6] });
+
+  // ================= AIS-maal: KUN EKTE AIS =================
+  // Radaren henter maalene sine direkte fra AIS-broen i side-API-et
+  // (/ais/targets) — samme ekte Kystverket-stroem som ECDIS bruker. Broen
+  // holder EN TCP-oppkobling og deler den ut, saa ECDIS og radar kan staa
+  // aapne samtidig. Det finnes ingen simulert flaate her: naar stroemmen er
+  // nede tegnes ingen ekko, for et tomt skop er sant og oppdiktede skip er
+  // det ikke.
+  var aisTargets = [];
+  var aisAt = 0;                        // naar siste svar kom
+  var aisState = "off";                 // broens tilstand, vist i SRC-feltet
+  var aisFails = 0;
+  var aisBusy = false;
+  var aisShown = {};                    // sist tegnet posisjon per MMSI (kun for jevn glidning)
+  var AIS_STALE_MS = 30000;             // uten svar saa lenge er maalbildet ikke sant lenger
+  function aisBase() { return /^https?:$/.test(location.protocol) ? location.origin : ""; }
+  // Utsnitt rundt eget skip, romslig nok til aa daekke skopet paa lengste
+  // rekkevidde. Broen kapper svaret paa de ferskeste maalene, saa en boks
+  // over hele kysten ville kunne skyve ut nettopp de naere fartoyene.
+  function aisBox() {
+    var padNm = Math.max(24, ((state && state.range) || 6) * 3);
+    var dLat = padNm / 60;
+    var dLon = dLat / Math.max(0.25, Math.cos(own.lat * Math.PI / 180));
+    return [
+      (own.lat - dLat).toFixed(4), (own.lon - dLon).toFixed(4),
+      (own.lat + dLat).toFixed(4), (own.lon + dLon).toFixed(4)
+    ].join(",");
+  }
+  function shipTypeName(c) {
+    if (c == null) return "Vessel";
+    if (c >= 60 && c <= 69) return "Passenger";
+    if (c >= 70 && c <= 79) return "Cargo";
+    if (c >= 80 && c <= 89) return "Tanker";
+    if (c >= 40 && c <= 49) return "HSC";
+    if (c === 30) return "Fishing";
+    if (c === 31 || c === 32 || c === 52) return "Tug";
+    if (c === 33) return "Dredger";
+    if (c === 34) return "Dive vessel";
+    if (c === 35) return "Military";
+    if (c === 36) return "Sailing";
+    if (c === 37) return "Pleasure";
+    if (c === 50) return "Pilot";
+    if (c === 51) return "SAR";
+    if (c === 53) return "Port tender";
+    if (c === 54) return "Anti-pollution";
+    if (c === 55) return "Law enforcement";
+    if (c === 58) return "Medical";
+    return "Vessel";
+  }
+  // Statisk fartoydata (navn/type/dimensjoner per MMSI) - SAMME cache som
+  // ECDIS bruker (mrd_ais_static). AIS sender de statiske feltene bare hvert
+  // ~6. minutt, saa uten cachen staar maallisten full av "MMSI ..." i
+  // minuttene etter en kaldstart. Kun ekte, tidligere mottatte data.
+  var aisStatic = loadJson("mrd_ais_static") || {};
+  var aisStaticDirty = false, aisStaticSavedAt = 0;
+  function mergeStatic(mmsi, t) {
+    if (mmsi == null) return;
+    var e = aisStatic[mmsi];
+    // "MMSI ..."-plassholderen laeres aldri som navn, og dirty settes KUN
+    // ved reelle endringer - samme regler som ECDIS-siden av cachen.
+    var name = (t.name && !/^MMSI \d+$/.test(t.name)) ? t.name : "";
+    if (name || t.shipType != null || (t.dim && t.dim.l)) {
+      e = aisStatic[mmsi] = e || {};
+      if (name && e.n !== name) { e.n = name; aisStaticDirty = true; }
+      if (t.shipType != null && e.st !== t.shipType) { e.st = t.shipType; aisStaticDirty = true; }
+      if (t.dim && t.dim.l && (!e.d || e.d[0] !== t.dim.l || e.d[1] !== (t.dim.b || 0))) { e.d = [t.dim.l, t.dim.b || 0]; aisStaticDirty = true; }
+      e.at = Date.now();
+    }
+    if (!e) return;
+    if (!t.name && e.n && !/^MMSI \d+$/.test(e.n)) t.name = e.n;
+    if (t.shipType == null && e.st != null) t.shipType = e.st;
+    if (!t.dim && e.d) t.dim = { l: e.d[0], b: e.d[1] };
+  }
+  function saveStatic() {
+    if (!aisStaticDirty || Date.now() - aisStaticSavedAt < 10000) return;
+    aisStaticDirty = false; aisStaticSavedAt = Date.now();
+    try { localStorage.setItem("mrd_ais_static", JSON.stringify(aisStatic)); } catch (e) {}
+  }
+  // Storrelsesfaktor: store skip gir store ekko - som paa en ekte radar.
+  function sizeK(t) {
+    var l = t.dim && t.dim.l;
+    if (!l) return 1;
+    if (l >= 200) return 2;
+    if (l >= 120) return 1.65;
+    if (l >= 60) return 1.35;
+    if (l >= 30) return 1.12;
+    if (l >= 15) return 0.95;
+    return 0.8;
+  }
+  var AIS_COLS = ["#0A84FF", "#34C759", "#FF9F0A", "#BF5AF2", "#FF375F", "#30B0C7", "#FFD60A"];
+  function aisColor(mmsi) { return AIS_COLS[Math.abs(mmsi | 0) % AIS_COLS.length]; }
+  function pollAis(force) {
+    var base = aisBase();
+    if (!base || aisBusy) return;
+    if (document.hidden && !force) return;
+    aisBusy = true;
+    fetch(base + "/ais/targets?bbox=" + aisBox(), { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (snap) {
+        var out = [], src = snap.targets || [], now = Date.now();
+        for (var i = 0; i < src.length; i++) {
+          var m = src[i];
+          if (m.lat == null || m.lon == null) continue;
+          var cog = m.cog != null ? m.cog : (m.hdg || 0);
+          var t = {
+            mmsi: m.mmsi, lat: m.lat, lon: m.lon,
+            sog: m.sog || 0, cog: cog, hdg: m.hdg != null ? m.hdg : cog,
+            name: m.name || "", shipType: m.shipType, dim: m.dim,
+            col: aisColor(m.mmsi)
+          };
+          mergeStatic(m.mmsi, t);
+          t.type = t.shipType != null ? shipTypeName(t.shipType) : "Vessel";
+          if (!t.name) t.name = "MMSI " + m.mmsi;
+          // MELDT posisjon - noyaktig den ECDIS tegner. Ekkoet starter der
+          // det stod sist og glir hit; det loper aldri foran meldingen.
+          t.rLat = m.lat; t.rLon = m.lon;
+          var prev = aisShown[m.mmsi];
+          if (prev && now - prev.at < 12000 && distNm(prev, t) < 1.5) { t.lat = prev.lat; t.lon = prev.lon; }
+          out.push(t);
+        }
+        aisTargets = out;
+        for (var key in aisShown) if (now - aisShown[key].at > 60000) delete aisShown[key];
+        saveStatic();
+        aisAt = now;
+        aisState = snap.state || "connected";
+        if (aisFails >= 4) addAlarm("AIS FEED RESTORED", "info");
+        aisFails = 0;
+      })
+      .catch(function () {
+        aisState = "error";
+        // Stroemmen er borte: la staa til den er sikkert utdatert, og slett
+        // den saa. Uten dette ble den siste maallisten staaende og glidd
+        // videre i det uendelige - fartoy kartet for lengst hadde flyttet.
+        if (Date.now() - aisAt > AIS_STALE_MS) { aisTargets = []; aisShown = {}; }
+        if (++aisFails === 4) addAlarm("AIS FEED UNAVAILABLE — NO TARGETS", "warn");
+      })
+      .then(function () { aisBusy = false; });
+  }
+  pollAis();
+  setInterval(pollAis, 3000);
+  // En glemt radarfane holdt AIS-broen oppkoblet hele dogenet. Pausen tas naar
+  // fanen er skjult, og bildet hentes med en gang den er synlig igjen.
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) return;
+    pollServer();
+    pollAis(true);
+  });
+
+  // Kartet tegner AIS-maalene DER DE MELDER SEG. Radaren gjor det samme: den
+  // dodregner dem ikke fremover (da ville ekkoene ligget foran skipene paa
+  // ECDIS-skjermen, og etter et feilet kall drevet av garde helt alene) - den
+  // glir bare over de siste meterne mellom to meldinger saa bevegelsen blir
+  // jevn. Under et sekund etter hvert svar staar ekkoet paa kartets koordinat.
+  function targetsTick(dt) {
+    var k = 1 - Math.exp(-dt / 0.3), now = Date.now();
+    for (var i = 0; i < aisTargets.length; i++) {
+      var t = aisTargets[i];
+      if (t.rLat == null) continue;
+      t.lat += (t.rLat - t.lat) * k;
+      t.lon += (t.rLon - t.lon) * k;
+      // Posten gjenbrukes: med noen hundre maal ville et nytt objekt per maal
+      // per bilde vaert flere titusen sopleobjekter i sekundet.
+      var e = aisShown[t.mmsi];
+      if (e) { e.lat = t.lat; e.lon = t.lon; e.at = now; }
+      else aisShown[t.mmsi] = { lat: t.lat, lon: t.lon, at: now };
+    }
+  }
+  function ownFeedFresh() { return aisTargets.length > 0 && Date.now() - aisAt < AIS_STALE_MS; }
+  function relayFresh() { return !!(liveTargets && liveTargets.length && Date.now() - liveTargetsAt < 6000); }
+  function targets() {
+    if (ownFeedFresh()) return aisTargets;
+    return relayFresh() ? liveTargets : [];
+  }
+  function aisLive() { return targets().length > 0; }
+
+  // ================= Avledede live-data for venstre datakolonne =================
+  // Alt foelger demoens aand: ROT maales av faktisk kursendring, loggen
+  // akkumulerer utseilt distanse (localStorage saa den overlever omstart), og
+  // vind/strom/dybde er glatte pseudotilfeldige felt slik at tallene lever
+  // uten aa hoppe. Rutedataene regnes mot samme rute som ECDIS.
+  var rotDegMin = 0, prevRotHdg = own.hdg;
+  var logNm = 0, logSavedAt = 0;
+  (function () {
+    var v = parseFloat((function () { try { return localStorage.getItem("mrd_log") || ""; } catch (e) { return ""; } })());
+    if (isFinite(v) && v >= 0) logNm = v;
+  })();
+  function derivedTick(dt) {
+    if (dt <= 0) return;
+    var d = ((own.hdg - prevRotHdg + 540) % 360) - 180;
+    prevRotHdg = own.hdg;
+    var inst = Math.max(-40, Math.min(40, d / dt * 60));
+    rotDegMin += (inst - rotDegMin) * Math.min(1, dt * 2.2);
+    logNm += own.sog * dt / 3600;
+    var nowMs = Date.now();
+    if (nowMs - logSavedAt > 10000) {
+      logSavedAt = nowMs;
+      try { localStorage.setItem("mrd_log", logNm.toFixed(3)); } catch (e) {}
+    }
+  }
+  function envNow() {
+    var t = Date.now() / 1000;
+    return {
+      set: ((208 + 26 * Math.sin(t / 640) + 8 * Math.sin(t / 151)) % 360 + 360) % 360,
+      drift: 0.7 + 0.35 * Math.sin(t / 540 + 1.3),
+      windDir: ((243 + 24 * Math.sin(t / 590 + 0.6) + 6 * Math.sin(t / 97)) % 360 + 360) % 360,
+      windKn: Math.max(2, 11 + 4.5 * Math.sin(t / 420 + 2) + 1.5 * Math.sin(t / 71)),
+      depth: Math.max(8, 52 + 34 * Math.sin(t / 260 + own.lat * 40) + 9 * Math.sin(t / 53))
+    };
+  }
+  function distToLegNm(p, a, b) {
+    var legBrg = bearingDeg(a, b), L = distNm(a, b) || 1e-6;
+    var ang = (bearingDeg(a, p) - legBrg) * Math.PI / 180;
+    var along = Math.max(0, Math.min(L, distNm(a, p) * Math.cos(ang)));
+    var proj = moveLL(a.lat, a.lon, legBrg, along);
+    return distNm(p, proj);
+  }
+  function navData() {
+    if (route.length < 2) return null;
+    var leg = own.leg;
+    if (anchor && !anchor.legKnown && following()) {
+      // ECDIS styrer posisjonen men deler ikke aktivt legg — bruk naermeste.
+      var best = 1, bd = Infinity;
+      for (var i = 1; i < route.length; i++) {
+        var d = distToLegNm(own, route[i - 1], route[i]);
+        if (d < bd) { bd = d; best = i; }
+      }
+      leg = best;
+    }
+    leg = Math.max(1, Math.min(leg, route.length - 1));
+    var a = route[leg - 1], b = route[leg];
+    var legBrg = bearingDeg(a, b);
+    var ang = (bearingDeg(a, own) - legBrg) * Math.PI / 180;
+    var dst = distNm(own, b);
+    var ttgH = own.sog > 0.5 ? dst / own.sog : null;
+    return {
+      leg: leg, n: route.length,
+      brg: bearingDeg(own, b), dst: dst,
+      xte: distNm(a, own) * Math.sin(ang),   // + = styrbord for legglinjen
+      ttgH: ttgH
+    };
+  }
+  function fmtDur(h) {
+    if (h == null || !isFinite(h)) return "—";
+    var s = Math.round(h * 3600);
+    var mm = Math.floor((s % 3600) / 60), ss = s % 60;
+    if (s < 3600) return String(mm).padStart(2, "0") + ":" + String(ss).padStart(2, "0");
+    return Math.floor(s / 3600) + ":" + String(mm).padStart(2, "0") + ":" + String(ss).padStart(2, "0");
+  }
+  function fmtUTC(ms, withSec) {
+    var d = new Date(ms);
+    var hm = String(d.getUTCHours()).padStart(2, "0") + ":" + String(d.getUTCMinutes()).padStart(2, "0");
+    return withSec ? hm + ":" + String(d.getUTCSeconds()).padStart(2, "0") : hm;
+  }
+
+  // ================= Landekko fra SAMME sjokart som ECDIS =================
+  // Landet ble for tegnet fra Natural Earth 1:10M. Det er en verdensdekkende
+  // grovkontur: i skjaergarden rundt Bergen ligger den langt fra kartets
+  // kystlinje og mangler de fleste holmene og skjaerene. Ekkobildet stemte
+  // derfor ikke med ECDIS-skjermen ved siden av, og AIS-maal i et sund saa ut
+  // til aa ga tvers over land. Landet males naa fra Kartverkets
+  // sjokartraster - de samme flisene ECDIS tegner - med NOYAKTIG samme
+  // fargeprove som ECDIS' tileLandMask bruker for aa skille land fra sjo.
+  // Natural Earth beholdes bare som reserve naar flisene ikke naas.
+  function lat2my(lat) { return 0.5 - Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) / (2 * Math.PI); }
+  function my2lat(m) { return Math.atan(Math.sinh(Math.PI * (1 - 2 * m))) * 180 / Math.PI; }
+  function proxyBase() { return /^https?:$/.test(location.protocol) ? "/proxy?url=" : null; }
+
+  var tileLand = {};                    // "z/x/y" -> canvas med landmaske | false (gitt opp)
+  var tilePending = {}, tileTries = {}, tileInflight = 0, tileOrder = [];
+  var TILE_MAX_INFLIGHT = 6, TILE_CACHE = 400;
+
+  function decodeLandTile(img, key) {
+    var c = document.createElement("canvas"); c.width = 256; c.height = 256;
+    var cx = c.getContext("2d", { willReadFrequently: true });
+    var d;
+    try {
+      cx.drawImage(img, 0, 0, 256, 256);
+      d = cx.getImageData(0, 0, 256, 256).data;
+    } catch (e) { tileLand[key] = false; return; }   // tainted canvas: gi opp denne flisen
+    var out = cx.createImageData(256, 256), od = out.data;
+    for (var i = 0; i < 65536; i++) {
+      var o = i * 4;
+      if (d[o + 3] < 10) continue;                   // hull i kartdekningen er ikke land
+      var r = d[o], g = d[o + 1], b = d[o + 2];
+      if (r > 190 && g > 178 && b < 214 && (r - b) > 17 && (g - b) > 3) {
+        od[o] = 255; od[o + 1] = 255; od[o + 2] = 255; od[o + 3] = 255;
       }
     }
-  })();
-  // Ren dodregning langs COG — samme fremskriving som ECDIS gjor for baatene
-  // sine, saa bildet holder seg likt naar man bytter mellom sidene.
-  var fleetAcc = 0;
-  function targetsTick(dt) {
-    for (var i = 0; i < simTargets.length; i++) {
-      var t = simTargets[i];
-      t.hdg = t.cog;
-      if (!t.sog) continue;
-      var step = moveLL(t.lat, t.lon, t.cog, t.sog * dt / 3600);
-      t.lat = step.lat; t.lon = step.lon;
-    }
-    // Flaaten folger eget skip (samme oppforsel som ECDIS): baater som er
-    // sakket > 30 nm akterut respawnes 8-18 nm foran baugen med kryssende
-    // kurs, saa skopet alltid har trafikk ogsaa paa lange transitter.
-    if (liveTargets && Date.now() - liveTargetsAt < 6000) return;
-    fleetAcc += dt;
-    if (fleetAcc < 5) return;
-    fleetAcc = 0;
-    for (var j = 0; j < simTargets.length; j++) {
-      var s2 = simTargets[j];
-      if (distNm(s2, own) <= 30) continue;
-      var p = moveLL(own.lat, own.lon, (own.cog || 0) + (Math.random() * 120 - 60), 8 + Math.random() * 10);
-      s2.lat = p.lat; s2.lon = p.lon;
-      s2.cog = s2.hdg = ((own.cog || 0) + 100 + Math.random() * 160) % 360;
-    }
+    cx.putImageData(out, 0, 0);
+    tileLand[key] = c;
+    tileOrder.push(key);
+    while (tileOrder.length > TILE_CACHE) { var old = tileOrder.shift(); if (old !== key) delete tileLand[old]; }
+    if (!landStamp) landStamp = performance.now();
+    chartLandOk = true;
   }
-  function targets() {
-    if (liveTargets && Date.now() - liveTargetsAt < 6000) return liveTargets;
-    return simTargets;
-  }
-  // Naar direktespeilingen av en aapen ECDIS opphorer (siden ble lukket),
-  // re-seedes flaaten fra cachen ECDIS nettopp skrev ved lukking, saa
-  // overgangen er somlos og medlemslisten fersk.
-  var liveWasFresh = false;
-  setInterval(function () {
-    var fresh = !!(liveTargets && Date.now() - liveTargetsAt < 6000);
-    if (liveWasFresh && !fresh) {
-      var fleet = fleetFromCache();
-      if (fleet) simTargets = fleet;
-    }
-    liveWasFresh = fresh;
-  }, 1000);
-  // Radaren skriver ogsaa bildet tilbake til mrd_ais (men ikke mens en aapen
-  // ECDIS speiles direkte — da skriver ECDIS selv), slik at neste side som
-  // aapnes fortsetter med de samme baatene der de faktisk var.
-  function persistFleet() {
-    if (liveTargets && Date.now() - liveTargetsAt < 6000) return;
-    if (!simTargets.length) return;
-    try {
-      localStorage.setItem("mrd_ais", JSON.stringify({
-        savedAt: Date.now(), mode: cacheMode,
-        targets: simTargets.slice(0, 40).map(function (t) {
-          return { lat: t.lat, lon: t.lon, cog: t.cog || 0, sog: t.sog || 0, hdg: t.hdg != null ? t.hdg : t.cog, name: t.name || "", type: t.type, col: t.col, mmsi: t.mmsi };
-        })
-      }));
-    } catch (e) {}
-  }
-  setInterval(persistFleet, 5000);
-  window.addEventListener("pagehide", persistFleet);
 
-  // ================= Kystlinje for landekko =================
+  function landTile(z, x, y) {
+    var key = z + "/" + x + "/" + y;
+    var v = tileLand[key];
+    if (v) return v;
+    if (v === false || tilePending[key] || tileInflight >= TILE_MAX_INFLIGHT) return null;
+    tilePending[key] = 1; tileInflight += 1;
+    var url = "https://cache.kartverket.no/v1/wmts/1.0.0/sjokartraster/default/webmercator/" + z + "/" + y + "/" + x + ".png";
+    var settled = false;
+    function finish() { if (settled) return; settled = true; delete tilePending[key]; tileInflight -= 1; }
+    function load(src, cross, onFail) {
+      var img = new Image();
+      if (cross) img.crossOrigin = "anonymous";
+      img.onload = function () { finish(); decodeLandTile(img, key); };
+      img.onerror = onFail;
+      img.src = src;
+    }
+    // Direkte forst (Kartverket sender CORS); blokkeres det, gaa via sidens
+    // egen /proxy - da er flisen samme opphav og pikslene kan leses.
+    load(url, true, function () {
+      var pb = proxyBase();
+      if (pb) {
+        load(pb + encodeURIComponent(url), false, function () {
+          finish();
+          tileTries[key] = (tileTries[key] || 0) + 1;
+          if (tileTries[key] >= 3) tileLand[key] = false;
+        });
+        return;
+      }
+      finish();
+      tileTries[key] = (tileTries[key] || 0) + 1;
+      if (tileTries[key] >= 3) tileLand[key] = false;
+    });
+    return null;
+  }
+
+  // Flisniva valgt slik at en flispiksel er omtrent en skjermpiksel: skopet
+  // faar full kartdetalj paa 0.25 nm og et handterlig antall fliser paa 48 nm.
+  function landZoom(k, lat) {
+    var nmPerDeg = 60 * Math.max(0.2, Math.cos(lat * Math.PI / 180));
+    var z = Math.round(Math.log(Math.max(1, 1.3 * k * 360 * nmPerDeg / 256)) / Math.LN2);
+    return Math.max(5, Math.min(16, z));
+  }
+  function tilesFor(z, latMin, latMax, lonMin, lonMax) {
+    var n = Math.pow(2, z);
+    var xa = Math.floor((lonMin + 180) / 360 * n), xb = Math.floor((lonMax + 180) / 360 * n);
+    var ya = Math.floor(lat2my(latMax) * n), yb = Math.floor(lat2my(latMin) * n);
+    var out = [];
+    for (var x = xa; x <= xb; x++) {
+      for (var y = Math.max(0, ya); y <= Math.min(n - 1, yb); y++) {
+        out.push({
+          z: z, x: ((x % n) + n) % n, y: y,
+          lonMin: x / n * 360 - 180, lonMax: (x + 1) / n * 360 - 180,
+          latMax: my2lat(y / n), latMin: my2lat((y + 1) / n)
+        });
+      }
+    }
+    return out;
+  }
+
+  var chartLandOk = false;              // har vi noen gang faatt dekodet en flis?
   var coast = null;
   (function loadCoast() {
     var urls = [
@@ -506,7 +921,7 @@
   };
   var cupRef = own.cog;                 // laast referansekurs for C-UP
   var tmA = null;                       // geo-anker for true motion
-  var sweep = 0, lastT = performance.now(), landDirty = true, landRef = null;
+  var sweep = 0, lastT = performance.now(), landDirty = true, landRef = null, landStamp = 0;
   var trailDots = [], lastTrailAt = 0;
   var PANEL = 280;
   var tts = [], ttSeq = 0;              // ARPA/TT-liste
@@ -518,9 +933,19 @@
   var ORG = { x: 0, y: 0 };
   function resize() {
     DPR = Math.min(2, window.devicePixelRatio || 1);
-    PANEL = window.innerWidth <= 1080 ? 236 : 280;
-    W = window.innerWidth - PANEL; H = window.innerHeight;
+    // Telefon (<=740): panelet ligger som bunnark, skopet faar full bredde.
+    var MOB = window.innerWidth <= 740;
+    document.documentElement.classList.toggle("mob", MOB);
+    PANEL = MOB ? 0 : (window.innerWidth <= 1080 ? 236 : 280);
+    var PH = MOB ? Math.round(window.innerHeight * 0.44) : 0;
+    W = window.innerWidth - PANEL; H = window.innerHeight - PH;
     scope.style.right = PANEL + "px";
+    scope.style.bottom = PH + "px";
+    // Basestilen har width:auto/height:100%; med bunnark maa boksen settes
+    // eksplisitt, ellers aspekt-skalerer canvasen (replaced element) seg
+    // storre enn viewporten.
+    scope.style.width = W + "px";
+    scope.style.height = H + "px";
     scope.width = W * DPR; scope.height = H * DPR;
     echoC.width = W * DPR; echoC.height = H * DPR;
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -648,24 +1073,77 @@
   }
 
   // ================= Land prerendres relativt egen posisjon =================
-  function renderLand() {
-    landCx.clearRect(0, 0, LS, LS);
-    landDirty = false;
-    landRef = { lat: own.lat, lon: own.lon, range: state.range };
-    if (!coast) return;
-    var P = PALC[state.pal];
+  // Landmasken tegnes i skopets egne koordinater: x er lineaer i lengdegrad
+  // og y lineaer i breddegrad, saa en Mercator-flis daekker et rektangel og
+  // kan legges inn med en enkel drawImage. Innenfor EN flis er Mercator-
+  // strekket under en piksel paa disse breddene, saa forenklingen koster
+  // ingenting - og landet havner der kartet har det.
+  function chartTiles(ref, k) {
+    var nmHalf = (LS / 2) / k;
+    var cosLat = Math.max(0.2, Math.cos(ref.lat * Math.PI / 180));
+    var dLat = nmHalf / 60, dLon = dLat / cosLat;
+    var latMin = Math.max(-85, ref.lat - dLat), latMax = Math.min(85, ref.lat + dLat);
+    var lonMin = ref.lon - dLon, lonMax = ref.lon + dLon;
+    var z = landZoom(k, ref.lat), list = tilesFor(z, latMin, latMax, lonMin, lonMax);
+    while (list.length > 48 && z > 5) { z -= 1; list = tilesFor(z, latMin, latMax, lonMin, lonMax); }
+    return list;
+  }
+  // Ber om flisene og sier hvor mange som allerede er dekodet. Kallet er det
+  // som starter nedlastingen, saa det gjores ogsaa naar vi bare sjekker.
+  function chartTilesReady(list) {
+    var ready = 0;
+    for (var i = 0; i < list.length; i++) if (landTile(list[i].z, list[i].x, list[i].y)) ready += 1;
+    return ready;
+  }
+  function drawChartLand(ref, k, list) {
+    var half = LS / 2;
+    var cosLat = Math.max(0.2, Math.cos(ref.lat * Math.PI / 180));
+    if (!list.length) return false;
+    var any = false;
+    landCx.save();
+    landCx.translate(half, half);
+    landCx.imageSmoothingEnabled = true;
+    // Litt uskarphet: en flismaske har knivskarpe kanter, et fosforskop har
+    // ikke det. Samme mykhet som polygonkonturen hadde for.
+    landCx.filter = "blur(0.9px)";
+    for (var i = 0; i < list.length; i++) {
+      var t = list[i], cv = landTile(t.z, t.x, t.y);
+      if (!cv) continue;
+      var x0 = (t.lonMin - ref.lon) * 60 * cosLat * k;
+      var x1 = (t.lonMax - ref.lon) * 60 * cosLat * k;
+      var y0 = -(t.latMax - ref.lat) * 60 * k;
+      var y1 = -(t.latMin - ref.lat) * 60 * k;
+      if (x1 - x0 <= 0 || y1 - y0 <= 0) continue;
+      landCx.drawImage(cv, x0, y0, x1 - x0, y1 - y0);
+      any = true;
+    }
+    landCx.filter = "none";
+    landCx.restore();
+    if (!any) return false;
+    // Masken er hvit; farg den i skopets fosforfarge.
+    landCx.save();
+    landCx.globalCompositeOperation = "source-in";
+    landCx.fillStyle = PALC[state.pal].land;
+    landCx.fillRect(0, 0, LS, LS);
+    landCx.restore();
+    return true;
+  }
+
+  // Reserve naar sjokartflisene ikke naas (offline kiosk): grov verdenskontur.
+  function drawCoastLand(ref, k) {
+    if (!coast) return false;
     landCx.save();
     landCx.translate(LS / 2, LS / 2);
-    landCx.fillStyle = P.land;
+    landCx.fillStyle = PALC[state.pal].land;
     landCx.filter = "blur(1.1px)";
     landCx.beginPath();
-    var k = kPx(), cosLat = Math.cos(own.lat * Math.PI / 180);
+    var cosLat = Math.cos(ref.lat * Math.PI / 180);
     for (var pi = 0; pi < coast.length; pi++) {
       var poly = coast[pi];
       for (var ri = 0; ri < poly.length; ri++) {
         var ring = poly[ri], started = false;
         for (var vi = 0; vi < ring.length; vi++) {
-          var n = (ring[vi][1] - own.lat) * 60, e = (ring[vi][0] - own.lon) * 60 * cosLat;
+          var n = (ring[vi][1] - ref.lat) * 60, e = (ring[vi][0] - ref.lon) * 60 * cosLat;
           var x = e * k, y = -n * k;
           if (!started) { landCx.moveTo(x, y); started = true; } else landCx.lineTo(x, y);
         }
@@ -674,7 +1152,14 @@
     }
     landCx.fill("evenodd");
     landCx.filter = "none";
-    // Ru opp landflatene med "manglende retur"-hull
+    landCx.restore();
+    return true;
+  }
+
+  // Ru opp landflatene med "manglende retur"-hull, som paa et ekte skop.
+  function roughenLand() {
+    landCx.save();
+    landCx.translate(LS / 2, LS / 2);
     landCx.globalCompositeOperation = "destination-out";
     for (var s = 0; s < 1100; s++) {
       var ang = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * RMAX;
@@ -683,6 +1168,23 @@
     }
     landCx.globalCompositeOperation = "source-over";
     landCx.restore();
+  }
+
+  var landRetryAt = 0;                  // naar vi kan prove aa tegne land paa nytt
+  function renderLand() {
+    var k = kPx();
+    var ref = { lat: own.lat, lon: own.lon, range: state.range };
+    var list = chartTiles(ref, k);
+    var ready = chartTilesReady(list);
+    // Ingen fliser inne ennaa, men sjokartet virker: behold forrige bilde og
+    // prov igjen om et oyeblikk. Uten dette blinket skopet mellom sjokartets
+    // kystlinje og grovkonturen hver gang rekkevidden ble endret.
+    if (!ready && chartLandOk) { landRetryAt = performance.now() + 400; return; }
+    landCx.clearRect(0, 0, LS, LS);
+    landDirty = false;
+    landRef = ref;
+    if (!drawChartLand(ref, k, list) && !drawCoastLand(ref, k)) return;
+    roughenLand();
   }
 
   // ================= Sektorstempling (ekko males inn der sveipet passerer) =================
@@ -710,7 +1212,7 @@
       var p = geoToScope(t.lat, t.lon);
       var d = Math.hypot(p.x, p.y);
       if (d > RMAX) continue;
-      var blob = Math.max(3, 6.4 - d / R * 2.6) * pulseK;
+      var blob = Math.max(3, 6.4 - d / R * 2.6) * pulseK * sizeK(t);
       var rx = blob * 2.2 * (state.es ? 1.5 : 1);
       var g = echo.createRadialGradient(p.x, p.y, 0, p.x, p.y, blob * 2.1);
       g.addColorStop(0, P.echoA);
@@ -798,13 +1300,13 @@
   }
 
   // ================= Datablokker i hjornene =================
-  function drawBlock(anchor, rows, width) {
+  function drawBlock(anchor, rows, width, yPos) {
     var P = PALC[state.pal];
     var pad = 9, hh = 0, i;
     for (i = 0; i < rows.length; i++) hh += rows[i].big ? 26 : 15;
     var h = hh + pad * 2 - 3;
     var x = anchor.indexOf("l") > -1 ? 10 : W - 10 - width;
-    var y = anchor.indexOf("t") > -1 ? 10 : H - 10 - h;
+    var y = yPos != null ? yPos : anchor.indexOf("t") > -1 ? 10 : H - 10 - h;
     ctx.fillStyle = P.blockBg;
     ctx.strokeStyle = P.blockBd;
     ctx.lineWidth = 1;
@@ -850,6 +1352,7 @@
         cy += 15;
       }
     }
+    return h;
   }
 
   function fmtPos(lat, lon) {
@@ -960,13 +1463,14 @@
       ctx.lineTo(p.x + Math.sin(va) * vl, p.y - Math.cos(va) * vl);
       ctx.stroke();
 
+      var sk = 0.8 + sizeK(t) * 0.35;
       if (danger && blinkOn) {
         // faremaal: fylt roed blinkende trekant
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate((t.cog || 0) * Math.PI / 180);
         ctx.fillStyle = DANGER;
-        ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(6.5, 7); ctx.lineTo(-6.5, 7); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0, -9 * sk); ctx.lineTo(6.5 * sk, 7 * sk); ctx.lineTo(-6.5 * sk, 7 * sk); ctx.closePath(); ctx.fill();
         ctx.restore();
       } else if (tt) {
         // sporet maal (TT): sirkel — stiplet mens den etableres
@@ -983,7 +1487,7 @@
         ctx.rotate((t.cog || 0) * Math.PI / 180);
         ctx.strokeStyle = col;
         ctx.lineWidth = 1.2;
-        ctx.beginPath(); ctx.moveTo(0, -6.5); ctx.lineTo(4.5, 5.5); ctx.lineTo(-4.5, 5.5); ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -6.5 * sk); ctx.lineTo(4.5 * sk, 5.5 * sk); ctx.lineTo(-4.5 * sk, 5.5 * sk); ctx.closePath(); ctx.stroke();
         ctx.restore();
       }
       var label = (tt ? tt.id + " " : "") + (t.name || "");
@@ -1108,25 +1612,66 @@
     ctx.restore();
 
     // ---------- datablokker ----------
+    // Paa smale skop (telefon) vises bare de to viktigste blokkene, smalere.
+    var slim = W < 560;
     var orientTxt = state.orient === "N" ? "N-UP" : state.orient === "H" ? "H-UP" : "C-UP";
-    drawBlock("tl", [
+    var leftY = 10 + drawBlock("tl", [
       { big: true, v: (state.range < 1 ? state.range.toFixed(2) : String(state.range)) + " NM", l: "RANGE" },
       { l: "RINGS", v: state.rings ? (state.range / 4).toFixed(state.range < 3 ? 2 : 1) + " NM" : "OFF" },
       { l: "PULSE", v: state.pulse + " · IR " + (state.ir ? "ON" : "OFF") + " · ES " + (state.es ? "ON" : "OFF"), small: true },
       { l: "MODE", v: orientTxt + " · " + state.motion + (state.offcenter ? " · OC" : "") }
-    ], 196);
+    ], slim ? 150 : 196) + 8;
 
-    drawBlock("tr", [
+    // Venstre live-datakolonne: rute/veipunkt, egne sensorer og miljodata.
+    // Tegnes bare naar gutteren utenfor PPI-sirkelen har plass til den
+    // (kioskens 16:9 har det; smale vinduer beholder bare hjorneblokkene).
+    if (CX - R >= 220) {
+      var nowMs = Date.now();
+      var nv = navData();
+      var env = envNow();
+      if (nv) {
+        var xteAbs = Math.abs(nv.xte);
+        leftY += drawBlock("tl", [
+          { big: true, v: nv.dst.toFixed(2) + " NM", l: "WPT " + (nv.leg + 1) + "/" + nv.n },
+          { l: "BRG WPT", v: fmt3(nv.brg) },
+          { l: "XTE", v: xteAbs.toFixed(2) + " NM" + (xteAbs < 0.01 ? "" : nv.xte > 0 ? " STBD" : " PORT"), col: xteAbs > 0.2 ? WARN : null },
+          { l: "ETA WPT", v: nv.ttgH != null ? fmtUTC(nowMs + nv.ttgH * 3600e3) + " UTC" : "—" },
+          { l: "TTG", v: fmtDur(nv.ttgH) }
+        ], 196, leftY) + 8;
+      }
+      var stw = Math.max(0, own.sog - env.drift * Math.cos((env.set - own.cog) * Math.PI / 180));
+      var rotAbs = Math.abs(rotDegMin);
+      leftY += drawBlock("tl", [
+        { l: "STW", v: stw.toFixed(1) + " KN" },
+        { l: "ROT", v: rotAbs < 0.05 ? "0.0°/MIN" : rotAbs.toFixed(1) + "°/MIN " + (rotDegMin > 0 ? "STBD" : "PORT") },
+        { l: "LOG", v: (logNm < 100 ? logNm.toFixed(2) : logNm.toFixed(1)) + " NM" }
+      ], 196, leftY) + 8;
+      leftY += drawBlock("tl", [
+        { l: "WIND T", v: fmt3(env.windDir) + " · " + env.windKn.toFixed(0) + " KN" },
+        { l: "SET·DRIFT", v: fmt3(env.set) + " · " + env.drift.toFixed(1) + " KN" },
+        { l: "DEPTH", v: env.depth.toFixed(0) + " M" },
+        { l: "UTC", v: fmtUTC(nowMs, true) }
+      ], 196, leftY) + 8;
+    }
+
+    var trRows = [
       { big: true, v: fmt3(own.hdg), l: "GYRO" },
       { l: "SOG", v: own.sog.toFixed(1) + " KN" },
-      { l: "COG", v: fmt3(own.cog) },
-      { l: "POS", v: fmtPos(own.lat, own.lon), small: true },
-      { l: "SRC", v: (live && Date.now() - liveAt < 4000) ? "ECDIS LIVE" : "SIM · GYRO OK" }
-    ], 212);
+      { l: "COG", v: fmt3(own.cog) }
+    ];
+    if (!slim) trRows.push({ l: "POS", v: fmtPos(own.lat, own.lon), small: true });
+    // SRC sier hvor posisjonen kommer fra, og hvor gammel synken er — staar
+    // det "DR · SOLO" seiler radaren for seg selv og skal ikke ventes aa
+    // ligge paa kartets skip.
+    var syncS = Math.round(syncAgeMs() / 1000);
+    trRows.push({ l: "SRC", v: (live && Date.now() - liveAt < 4000) ? "ECDIS LIVE"
+      : (following() ? "ECDIS SYNC " + (syncS < 1 ? "0" : syncS) + "S" : "DR · SOLO") });
+    trRows.push({ l: "AIS", v: aisLive() ? (aisTargets.length ? "LIVE · " + aisTargets.length + " TGT" : "ECDIS · " + liveTargets.length + " TGT") : (aisState === "error" ? "NO FEED" : "WAIT") });
+    drawBlock("tr", trRows, slim ? 160 : 212);
 
     var cur = state.cursor;
     var curPos = cur ? moveLL(own.lat, own.lon, cur.brg, cur.rng) : null;
-    drawBlock("bl", [
+    if (!slim) drawBlock("bl", [
       { l: "CURS", v: cur ? fmt3(cur.brg) + " · " + cur.rng.toFixed(2) + " NM" : "—" },
       { l: "", v: curPos ? fmtPos(curPos.lat, curPos.lon) : "", small: true },
       { l: "TUNE", bar: 0.82 + Math.sin(performance.now() / 700 + tuneT) * 0.06 },
@@ -1135,7 +1680,7 @@
 
     var dangerAny = false;
     for (var dk in dangerMap) if (dangerMap[dk]) { dangerAny = true; break; }
-    drawBlock("br", [
+    if (!slim) drawBlock("br", [
       { l: "EBL 1", v: state.ebl ? fmt3(state.ebl.brg) : "OFF" },
       { l: "VRM 1", v: state.ebl ? state.ebl.rng.toFixed(2) + " NM" : "OFF" },
       { l: "VECT", v: (state.vecMode === "R" ? "REL" : "TRUE") + " · " + state.vecMin + " MIN" },
@@ -1182,6 +1727,7 @@
     lastT = ts;
 
     ownTick(dt);
+    derivedTick(dt);
     targetsTick(dt);
     computeOrigin(0);
 
@@ -1194,7 +1740,10 @@
     if (!landDirty && landRef) {
       if (landRef.range !== state.range || distNm(landRef, own) > state.range * 0.02) landDirty = true;
     }
-    if (landDirty) renderLand();
+    // Nye fliser samles opp i 250 ms for de utloser en ny landtegning, ellers
+    // ville et flisdrag paa 48 stykker gitt 48 fulle opptegninger paa rad.
+    if (landStamp && ts - landStamp > 250) { landStamp = 0; landDirty = true; }
+    if (landDirty && ts >= landRetryAt) renderLand();
 
     if (state.tx) {
       var prev = sweep;
@@ -1457,6 +2006,18 @@
 
   document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
   addAlarm("RADAR READY — X-BAND SIMULATOR", "info");
+
+  // Debug-/supporthandtak (samme moenster som window.__ecdis i kartet).
+  window.__radar = {
+    get own() { return own; },
+    targets: targets,
+    get anchor() { return anchor; },
+    get syncAgeMs() { return syncAgeMs(); },
+    get following() { return following(); },
+    get aisAt() { return aisAt; },
+    get aisState() { return aisState; },
+    state: state
+  };
 })();
 </script>
 </body>

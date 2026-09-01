@@ -1,0 +1,41 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run tests
+        run: npm test
+      - name: Config files must stay valid JSON
+        run: |
+          for f in config/*.json package.json; do
+            node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" || exit 1
+          done
+      - name: No API keys committed to config
+        run: |
+          node -e "
+            const c = require('./config/contest-config.json');
+            for (const [name, value] of Object.entries(c.apiKeys || {})) {
+              if (value) {
+                console.error('config/contest-config.json still carries a live ' + name + ' key.');
+                console.error('API keys belong in environment variables, not in a public repo.');
+                process.exit(1);
+              }
+            }
+          "
+      - name: The USB copy must match the repository
+        run: |
+          U=Hatteland_Challenge_USB_OPPDATERT
+          diff -r public $U/public
+          diff -r lib $U/lib
+          diff -r config $U/config
+          diff server.js $U/server.js

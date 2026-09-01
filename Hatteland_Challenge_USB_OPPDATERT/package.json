@@ -4,6 +4,7 @@
   "description": "Touch-basert messekonkurranse med lokal Node-backend og kioskvennlig frontend.",
   "private": true,
   "scripts": {
+    "test": "node --test test/*.test.js",
     "start": "node server.js",
     "launch": "node launcher.js",
     "rush": "node launcher.js --rush",

@@ -257,6 +257,31 @@ data/entries.json
 
 Admin kan eksportere CSV og nullstille leaderboard. Ta kopi av `data/entries.json` etter messen hvis du vil arkivere resultatene.
 
+Highscoren staar ogsaa i nettleseren (`public/scores.js`): poengene lagres lokalt paa enheten FOER de sendes til serveren, og runder som ble spilt mens serveren var nede sendes inn igjen naar den er tilbake. Den lokale listen inneholder bare navn, poeng og tidspunkt — e-post og telefon ligger utelukkende i synkekoen og slettes i det innsendingen gaar gjennom.
+
+ECDIS-seilasen lagres per kiosk under `data/ecdis-state/<kiosk-id>.json`, der id-en kommer fra `?kiosk=` i URL-en. ECDIS og radar aapnes med samme verdi og deler derfor seilas; to skjermer med ulik id overskriver ikke lenger hverandre. Uten `?kiosk=` brukes den gamle `data/ecdis-state.json`. Slett filene for aa nullstille.
+
+## PIN-laas (valgfritt)
+
+Settes `KIOSK_PIN` i miljoet foer serveren startes, ber alle sider om koden foerst. Koden ligger bare paa serveren og sendes aldri til nettleseren; forsokene er bremset. `KIOSK_PIN_MINUTES` bestemmer hvor lenge en opplaasing varer (0 = til noen laaser igjen). Uten `KIOSK_PIN` er laasen helt av, og kiosken virker som foer.
+
+```bat
+set KIOSK_PIN=4821
+node launcher.js --selector --kiosk
+```
+
+Laasen er en sperre mot at tilfeldige folk bruker kiosken — ikke adgangskontroll. Adminsidene har sin egen sperre server-side (`x-admin-password`), og den er fortsatt den virkelige beskyttelsen av persondata.
+
+## Helsesjekk og tester
+
+`GET /api/health` svarer uten adminpassord og sier om kiosken lever og hvor dataene ligger — praktisk for aa sjekke en skjerm uten aa logge inn.
+
+```bash
+npm test
+```
+
+Testene kjorer AIS-dekoderen, validering/normalisering/CSV, highscore-flettingen i `public/scores.js`, kiosk-noekkelen i `public/ecdis/kiosk.js` og sikkerheten rundt `/api/ecdis-state` og `/proxy`. De aapner ingen port.
+
 ## USB-leveranse
 
 Mappen `Hatteland_Challenge_USB_OPPDATERT` er den komplette, offline-klare leveransen som kopieres til minnepenn. Den inneholder startskript, server, public-filer, config, tom datafil og portabel Node.js.
@@ -312,7 +337,17 @@ config/
   kiosk-config.json
 data/
   entries.json
+lib/
+  ais-kystverket.js       (Kystverkets AIS-stroem)
+  ecdis-state.js          (validering av lagret ECDIS-seilas)
+  proxy-allowlist.js      (hvilke verter /proxy faar hente fra)
+test/
+  *.test.js               (kjor med `npm test`)
 public/
+  app.html                          (fullskjerm-skall, serveres ikke av `/` lokalt)
+  scores.js                         (highscore: lokalt forst, server naar den svarer)
+  kiosk-lock.js                     (PIN-laas, av med mindre KIOSK_PIN er satt)
+  fullscreen.js                     (holder sidene i fullskjerm)
   select.html                       (kioskens forside)
   container-stacker-standalone.html
   fjord-runner-standalone.html
