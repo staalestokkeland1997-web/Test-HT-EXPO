@@ -3,14 +3,33 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { KystverketAis } = require("./lib/ais-kystverket");
+const { ecdisStateId, sanitizeEcdisState } = require("./lib/ecdis-state");
+const { proxyAllows } = require("./lib/proxy-allowlist");
+const tiles = require("./lib/tiles");
 
 const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const CONFIG_PATH = path.join(ROOT_DIR, "config", "contest-config.json");
 const KIOSK_CONFIG_PATH = path.join(ROOT_DIR, "config", "kiosk-config.json");
 const DATA_PATH = path.join(ROOT_DIR, "data", "entries.json");
-const ECDIS_STATE_PATH = path.join(ROOT_DIR, "data", "ecdis-state.json");
+// En fil per kiosk. For laa alt i EN fil: to skjermer som aapnet demoen
+// samtidig overskrev hverandres skip hvert 5. sekund. ECDIS og radar aapnes
+// med samme ?kiosk=-verdi og deler derfor tilstand.
+const ECDIS_STATE_DIR = path.join(ROOT_DIR, "data", "ecdis-state");
+const LEGACY_ECDIS_STATE_PATH = path.join(ROOT_DIR, "data", "ecdis-state.json");
+
+function ecdisStatePath(id) {
+  return id === "default"
+    ? LEGACY_ECDIS_STATE_PATH
+    : path.join(ECDIS_STATE_DIR, `${id}.json`);
+}
 const BACKUP_DIR = path.join(ROOT_DIR, "data", "backups");
+// Kartflisene ligger utenfor public/ med vilje: de lastes ned under drift
+// og skal ikke kunne serveres som vilkaarlige filer av den statiske veien.
+const TILE_DIR = path.join(ROOT_DIR, "data", "tiles");
+// Satt for aa la kiosken vaere helt offline: da hentes ingen manglende flis
+// fra nettet, og kartet viser bare det som faktisk er lastet ned.
+const TILES_OFFLINE = process.env.TILES_OFFLINE === "1";
 const DEFAULT_KIOSK_CONFIG = {
   server: {
     host: "127.0.0.1",
@@ -87,6 +106,7 @@ const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".geojson": "application/geo+json; charset=utf-8",
   ".svg": "image/svg+xml",
   ".webmanifest": "application/manifest+json; charset=utf-8",
   ".png": "image/png",
@@ -123,7 +143,9 @@ function loadConfig() {
 // aldri etterlater en halvskrevet config- eller datafil.
 function writeFileAtomic(filePath, contents) {
   const tempPath = `${filePath}.tmp-${process.pid}`;
-  fs.writeFileSync(tempPath, contents, "utf8");
+  // Kartfliser kommer som Buffer; da skal det ikke settes tekstkoding.
+  if (Buffer.isBuffer(contents)) fs.writeFileSync(tempPath, contents);
+  else fs.writeFileSync(tempPath, contents, "utf8");
   fs.renameSync(tempPath, filePath);
 }
 
@@ -599,9 +621,19 @@ function getLeaderboard(entries, limit = 10, game = null) {
     }));
 }
 
+// Ett gjennomlop i stedet for en full sortering per spill. Med sju spill
+// sorterte /api/leaderboard hele deltakerlisten sju ganger for hver
+// forespoersel, ogsaa naar klienten bare ba om ett av dem.
 function getAllLeaderboards(entries, limit = 10) {
+  const byGame = Object.fromEntries(Object.keys(GAMES).map((gameId) => [gameId, []]));
+
+  for (const entry of entries) {
+    const bucket = byGame[entry.game];
+    if (bucket) bucket.push(entry);
+  }
+
   return Object.fromEntries(
-    Object.keys(GAMES).map((gameId) => [gameId, getLeaderboard(entries, limit, gameId)])
+    Object.entries(byGame).map(([gameId, scoped]) => [gameId, getLeaderboard(scoped, limit)])
   );
 }
 
@@ -618,7 +650,14 @@ function buildCsv(entries) {
     entry.createdAt
   ]);
 
-  const escape = (value) => `"${String(value).replace(/"/g, "\"\"")}"`;
+  // Regneark tolker ledende =, +, - og @ som formelstart, saa et deltakernavn
+  // kan ellers bli kjorbar kode naar admin aapner eksporten i Excel. Apostrof
+  // foran gjor cellen til ren tekst.
+  const escape = (value) => {
+    const text = String(value ?? "");
+    const guarded = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+    return `"${guarded.replace(/"/g, "\"\"")}"`;
+  };
   return [header, ...rows].map((row) => row.map(escape).join(",")).join("\n");
 }
 
@@ -656,14 +695,22 @@ function sendText(response, statusCode, payload, contentType = "text/plain; char
   response.end(payload);
 }
 
+const MAX_BODY_BYTES = 1024 * 1024;
+
 function parseJsonBody(request) {
+  // Sjekk headeren forst, saa en altfor stor kropp avvises for den leses inn.
+  const declared = Number(request.headers["content-length"]);
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+    return Promise.reject(new Error("Payload too large"));
+  }
+
   return new Promise((resolve, reject) => {
     let body = "";
 
     request.on("data", (chunk) => {
       body += chunk;
 
-      if (body.length > 1024 * 1024) {
+      if (body.length > MAX_BODY_BYTES) {
         reject(new Error("Payload too large"));
         request.destroy();
       }
@@ -702,7 +749,54 @@ function safeEquals(left, right) {
   return crypto.timingSafeEqual(leftBuffer, rightBuffer);
 }
 
+function clientIp(request) {
+  const forwarded = String(request.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return forwarded || request.headers["x-real-ip"] || request.socket.remoteAddress || "unknown";
+}
+
+// Uten dette kan et skript prove tusenvis av adminpassord i minuttet, eller
+// fylle deltakerlisten med falsk persondata. Kiosken kjorer i EN prosess, saa
+// telleren holder i minnet - den nullstilles naar serveren startes paa nytt.
+const hits = new Map();
+
+function hitCount(bucket, windowSeconds) {
+  const now = Date.now();
+  const slot = hits.get(bucket);
+
+  if (!slot || slot.resetAt <= now) {
+    hits.set(bucket, { count: 1, resetAt: now + windowSeconds * 1000 });
+
+    // Rydd med jevne mellomrom, ellers vokser kartet gjennom en hel messedag.
+    if (hits.size > 5000) {
+      for (const [key, value] of hits) if (value.resetAt <= now) hits.delete(key);
+    }
+
+    return 1;
+  }
+
+  slot.count += 1;
+  return slot.count;
+}
+
+function tooManyAttempts(response, bucket, limit, windowSeconds) {
+  if (hitCount(bucket, windowSeconds) <= limit) {
+    return false;
+  }
+
+  response.writeHead(429, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "Retry-After": String(windowSeconds)
+  });
+  response.end(JSON.stringify({ error: "Too many requests. Try again shortly." }));
+  return true;
+}
+
 function requireAdmin(request, response, config) {
+  if (tooManyAttempts(response, `admin:${clientIp(request)}`, 10, 600)) {
+    return false;
+  }
+
   const password = request.headers["x-admin-password"];
 
   if (!safeEquals(password, config.admin.password)) {
@@ -802,31 +896,109 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  // Helsesjekk uten sensitive data: sier om kiosken lever og hvor dataene
+  // ligger. Praktisk for overvaaking uten adminpassord.
+  if (request.method === "GET" && pathname === "/api/health") {
+    sendJson(response, 200, {
+      ok: true,
+      time: new Date().toISOString(),
+      storage: { mode: "local-file", persistent: true },
+      map: tileStoreSummary(),
+      adminLocked: false
+    });
+    return;
+  }
+
+  // PIN-laasen foran kiosken. Koden ligger i KIOSK_PIN og sendes ALDRI til
+  // nettleseren - klienten spor bare OM en PIN kreves, og faar ja/nei paa et
+  // forsok. Uten KIOSK_PIN satt er laasen helt av, saa kiosken virker som for.
+  if (pathname === "/api/kiosk-unlock") {
+    const pin = String(process.env.KIOSK_PIN || "").trim();
+
+    if (request.method === "GET") {
+      sendJson(response, 200, {
+        required: pin.length > 0,
+        minutes: Number(process.env.KIOSK_PIN_MINUTES) || 0
+      });
+      return;
+    }
+
+    if (request.method === "POST") {
+      if (!pin) {
+        sendJson(response, 200, { ok: true, minutes: 0 });
+        return;
+      }
+
+      // Uten bremse kan en firesifret kode gjettes paa sekunder.
+      if (tooManyAttempts(response, `pin:${clientIp(request)}`, 10, 300)) {
+        return;
+      }
+
+      let payload = {};
+      try {
+        payload = await parseJsonBody(request);
+      } catch (error) {
+        sendJson(response, 400, { error: "Invalid request." });
+        return;
+      }
+
+      if (!safeEquals(String((payload && payload.pin) || ""), pin)) {
+        sendJson(response, 401, { error: "Wrong code." });
+        return;
+      }
+
+      sendJson(response, 200, {
+        ok: true,
+        minutes: Number(process.env.KIOSK_PIN_MINUTES) || 0
+      });
+      return;
+    }
+  }
+
   // HT ECDIS: skipets posisjon/kurs/innstillinger lagres server-side slik at
   // demoen fortsetter der den slapp selv om nettleserprofilen nullstilles.
+  // AIS-maal lagres IKKE her - hver skjerm henter dem fra /ais/targets.
+  // Tidsstemplene under maales i SERVERENS klokke, bade naar tilstanden
+  // lagres og naar den leses. Da kan radaren regne ut hvor gammelt et
+  // snapshot er uten aa stole paa at ECDIS-maskinen og radarmaskinen har
+  // samme klokke.
   if (pathname === "/api/ecdis-state") {
+    const statePath = ecdisStatePath(ecdisStateId(url.searchParams));
+
     if (request.method === "GET") {
       try {
-        sendJson(response, 200, JSON.parse(fs.readFileSync(ECDIS_STATE_PATH, "utf8")));
+        const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+        sendJson(response, 200, { ...state, serverNow: Date.now() });
       } catch (error) {
-        sendJson(response, 200, {});
+        sendJson(response, 200, { serverNow: Date.now() });
       }
       return;
     }
 
     if (request.method === "POST") {
+      if (tooManyAttempts(response, `ecdis:${clientIp(request)}`, 120, 60)) {
+        return;
+      }
+
       try {
         const body = await parseJsonBody(request);
-        const document = JSON.stringify(body);
+        const clean = sanitizeEcdisState(body);
+
+        if (!clean) {
+          sendJson(response, 400, { error: "Invalid state payload." });
+          return;
+        }
+
+        const stamped = { ...clean, serverSavedAt: Date.now() };
+        const document = JSON.stringify(stamped);
 
         if (document.length > 256 * 1024) {
           sendJson(response, 413, { error: "State too large." });
           return;
         }
 
-        const tempPath = ECDIS_STATE_PATH + ".tmp";
-        fs.writeFileSync(tempPath, document + "\n", "utf8");
-        fs.renameSync(tempPath, ECDIS_STATE_PATH);
+        fs.mkdirSync(path.dirname(statePath), { recursive: true });
+        writeFileAtomic(statePath, document + "\n");
         sendJson(response, 200, { ok: true });
       } catch (error) {
         sendJson(response, 400, { error: "Invalid state payload." });
@@ -859,6 +1031,13 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "POST" && pathname === "/api/standalone-entry") {
+    // Endepunktet er aapent og lagrer navn, e-post og telefon. Uten en bremse
+    // kan bade leaderboardet og persondatabasen fylles med soppel fra ett
+    // skript. Taket ligger langt over det en messebesokende rekker.
+    if (tooManyAttempts(response, `entry:${clientIp(request)}`, 10, 300)) {
+      return;
+    }
+
     const payload = await parseJsonBody(request);
     const entryPayload = payload && typeof payload === "object" ? payload : {};
     const errors = validateStandaloneEntry(entryPayload);
@@ -1119,19 +1298,186 @@ async function handleApi(request, response, url) {
   });
 }
 
-// CORS-proxy for ECDIS-demoens dataleverandoerer (MET/yr, Kartverket tide,
-// EMODnet, kystlinje). Streng allowlist saa den ikke kan misbrukes som aapent
-// relay; api.met.no krever dessuten en identifiserende User-Agent.
-const PROXY_HOSTS = new Set([
-  "api.met.no",
-  "vannstand.kartverket.no",
-  "ows.emodnet-bathymetry.eu",
-  "d2ad6b4ur7yvpq.cloudfront.net",
-  "raw.githubusercontent.com"
-]);
-const PROXY_UA = "HT-ECDIS-Demo/1.0 (github.com/staalestokkeland1997-web/HT-S100-Demo)";
+// ---------------------------------------------------------------------------
+// Lokalt kartlager
+// ---------------------------------------------------------------------------
+// /tiles/<lag>/<z>/<x>/<y>.png serverer sjokartet fra data/tiles/ naar flisen
+// er lastet ned (se tools/download_tiles.js), og henter den ellers fra kilden
+// og lagrer den. Dermed virker kiosken uten nett paa omraadene som er hentet
+// ned, og lageret fylles ogsaa av vanlig bruk.
+//
+// Laget slaas opp i en fast tabell og z/x/y er heltall innenfor zoomnivaaets
+// grenser, saa ingen del av URL-en mot kilden kommer fra forespoerselen.
+const TILE_ROUTE = /^\/tiles\/([a-z]+)\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})\.png$/;
+const tileFetching = new Map();
 
-function handleProxy(request, response, query) {
+function sendTileFile(response, filePath) {
+  const stream = fs.createReadStream(filePath);
+  stream.on("error", () => {
+    if (!response.headersSent) sendText(response, 404, "Tile not found");
+    else response.end();
+  });
+  response.writeHead(200, {
+    "Content-Type": "image/png",
+    // Flisene er identifisert av z/x/y og endrer seg ikke innenfor en messe.
+    "Cache-Control": "public, max-age=604800",
+    "Access-Control-Allow-Origin": "*"
+  });
+  stream.pipe(response);
+}
+
+// En flis av gangen per noekkel: uten dette ville de 20-30 samtidige
+// forespoerslene en panorering utloser kunne hente og skrive samme flis flere
+// ganger. Ventende forespoersler faar samme svar.
+function fetchTileOnce(layer, z, x, y, filePath) {
+  const key = `${layer}/${z}/${x}/${y}`;
+  const running = tileFetching.get(key);
+  if (running) return running;
+
+  const job = (async () => {
+    const upstream = await fetch(tiles.tileUrl(layer, z, x, y), {
+      headers: { "User-Agent": PROXY_UA },
+      redirect: "follow",
+      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS)
+    });
+
+    if (!upstream.ok) throw new Error(`upstream ${upstream.status}`);
+
+    const body = Buffer.from(await upstream.arrayBuffer());
+    if (!body.length || body.length > 4 * 1024 * 1024) throw new Error("bad tile size");
+
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileAtomic(filePath, body);
+    return body;
+  })().finally(() => tileFetching.delete(key));
+
+  tileFetching.set(key, job);
+  return job;
+}
+
+async function handleTiles(request, response, match) {
+  const [, layer, zRaw, xRaw, yRaw] = match;
+  const z = Number(zRaw);
+  const x = Number(xRaw);
+  const y = Number(yRaw);
+
+  if (!tiles.isValidTile(layer, z, x, y)) {
+    sendText(response, 404, "Unknown tile");
+    return;
+  }
+
+  const filePath = tiles.tilePath(TILE_DIR, layer, z, x, y);
+
+  if (fs.existsSync(filePath)) {
+    sendTileFile(response, filePath);
+    return;
+  }
+
+  // Ingen lagret flis. Uten nett (eller med TILES_OFFLINE=1) svarer vi 404 med
+  // en gang: ECDIS tegner da sitt eget fallback-rutenett i stedet for aa vente.
+  if (TILES_OFFLINE) {
+    sendText(response, 404, "Tile not downloaded");
+    return;
+  }
+
+  try {
+    const body = await fetchTileOnce(layer, z, x, y, filePath);
+    response.writeHead(200, {
+      "Content-Type": "image/png",
+      "Cache-Control": "public, max-age=604800",
+      "Access-Control-Allow-Origin": "*"
+    });
+    response.end(body);
+  } catch (error) {
+    sendText(response, 404, "Tile not available");
+  }
+}
+
+// Hvor mye av kartet som faktisk ligger lokalt. Brukes av status.html og av
+// download_tiles.js, og sier med en gang om en kiosk er klar for aa staa uten
+// nett.
+function tileStoreSummary() {
+  const layers = {};
+  let total = 0;
+  let bytes = 0;
+
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (error) {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith(".png")) {
+        total++;
+        try {
+          bytes += fs.statSync(full).size;
+        } catch (error) {
+          /* fjernet mens vi talte */
+        }
+      }
+    }
+  };
+
+  for (const layer of Object.keys(tiles.LAYERS)) {
+    const before = total;
+    walk(path.join(TILE_DIR, layer));
+    if (total > before) layers[layer] = total - before;
+  }
+
+  return { tiles: total, bytes, layers, offline: TILES_OFFLINE };
+}
+
+// CORS-proxy for ECDIS-demoens dataleverandoerer (MET/yr, Kartverket tide,
+// EMODnet, kystlinje). Streng allowlist (lib/proxy-allowlist.js) saa den ikke
+// kan misbrukes som aapent relay; api.met.no krever dessuten en
+// identifiserende User-Agent.
+const PROXY_UA = "HT-ECDIS-Demo/1.0 (github.com/staalestokkeland1997-web/HT-S100-Demo)";
+const PROXY_TIMEOUT_MS = 8000;
+const PROXY_MAX_BYTES = 8 * 1024 * 1024;
+const PROXY_MAX_REDIRECTS = 2;
+
+// Allowlisten sjekkes paa HVERT hopp. Med redirect: "follow" ville en tillatt
+// vert som svarer 302 mot en annen vert tatt proxyen med seg dit, og
+// allowlisten var omgaatt.
+async function proxyFetch(startUrl, signal) {
+  let target = startUrl;
+
+  for (let hop = 0; hop <= PROXY_MAX_REDIRECTS; hop++) {
+    const upstream = await fetch(target.href, {
+      headers: { "User-Agent": PROXY_UA },
+      redirect: "manual",
+      signal
+    });
+
+    if (upstream.status < 300 || upstream.status > 399) {
+      return upstream;
+    }
+
+    const location = upstream.headers.get("location");
+    if (!location) return upstream;
+
+    let next;
+    try {
+      next = new URL(location, target.href);
+    } catch (error) {
+      throw new Error("Bad redirect target");
+    }
+
+    if (!proxyAllows(next)) {
+      throw new Error("Redirect to a host that is not allowed: " + next.hostname);
+    }
+
+    target = next;
+  }
+
+  throw new Error("Too many redirects");
+}
+
+async function handleProxy(request, response, query) {
   const cors = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -1159,7 +1505,7 @@ function handleProxy(request, response, query) {
     return;
   }
 
-  if (target.protocol !== "https:" || !PROXY_HOSTS.has(target.hostname)) {
+  if (!proxyAllows(target)) {
     response.writeHead(403, cors);
     response.end("Host not allowed: " + target.hostname);
     return;
@@ -1171,20 +1517,40 @@ function handleProxy(request, response, query) {
     return;
   }
 
-  fetch(target.href, { headers: { "User-Agent": PROXY_UA }, redirect: "follow" })
-    .then(async (upstream) => {
-      const body = Buffer.from(await upstream.arrayBuffer());
-      response.writeHead(upstream.status, {
-        ...cors,
-        "Content-Type": upstream.headers.get("content-type") || "application/octet-stream",
-        "Cache-Control": "no-cache"
-      });
-      response.end(body);
-    })
-    .catch((error) => {
+  try {
+    const upstream = await proxyFetch(target, AbortSignal.timeout(PROXY_TIMEOUT_MS));
+
+    // Uten tak kunne en stor motpart holde hele svaret i minnet paa kiosken.
+    const declared = Number(upstream.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > PROXY_MAX_BYTES) {
       response.writeHead(502, { ...cors, "Content-Type": "text/plain" });
-      response.end("Upstream error: " + error.message);
+      response.end("Upstream response too large");
+      return;
+    }
+
+    const body = Buffer.from(await upstream.arrayBuffer());
+
+    if (body.length > PROXY_MAX_BYTES) {
+      response.writeHead(502, { ...cors, "Content-Type": "text/plain" });
+      response.end("Upstream response too large");
+      return;
+    }
+
+    // Kartfliser og kystlinjer endrer seg ikke, saa la nettleseren beholde
+    // dem. For hentet hver panorering flisen paa nytt gjennom proxyen - tregt
+    // paa messa, og unodig trafikk paa et messenett.
+    const cacheable = upstream.status === 200 && !/(^|\.)api\.met\.no$/.test(target.hostname);
+    response.writeHead(upstream.status, {
+      ...cors,
+      "Content-Type": upstream.headers.get("content-type") || "application/octet-stream",
+      "Cache-Control": cacheable ? "public, max-age=3600" : "no-cache"
     });
+    response.end(body);
+  } catch (error) {
+    const timedOut = error && (error.name === "TimeoutError" || error.name === "AbortError");
+    response.writeHead(timedOut ? 504 : 502, { ...cors, "Content-Type": "text/plain" });
+    response.end((timedOut ? "Upstream timeout: " : "Upstream error: ") + target.hostname);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1261,7 +1627,16 @@ function handleAis(request, response, url) {
 
 const server = http.createServer(async (request, response) => {
   try {
-    const url = new URL(request.url, "http://localhost");
+    // En sti som ikke lar seg tolke (f.eks. "//", som URL leser som en
+    // protokollrelativ adresse) er en ugyldig forespoersel, ikke en feil i
+    // kiosken - svar 404 i stedet for aa la den bli en 500.
+    let url;
+    try {
+      url = new URL(request.url, "http://localhost");
+    } catch (error) {
+      sendText(response, 404, "Not found");
+      return;
+    }
 
     if (url.pathname.startsWith("/api/")) {
       await handleApi(request, response, url);
@@ -1273,8 +1648,14 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    const tileMatch = TILE_ROUTE.exec(url.pathname);
+    if (tileMatch) {
+      await handleTiles(request, response, tileMatch);
+      return;
+    }
+
     if (url.pathname === "/proxy") {
-      handleProxy(request, response, url.searchParams);
+      await handleProxy(request, response, url.searchParams);
       return;
     }
 
@@ -1287,20 +1668,42 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-ensureDataFile();
+// Bare naar filen kjores som kiosk-server. Testene laster den for aa naa
+// ren inn/ut-logikk (validering, normalisering, CSV) uten aa aapne en port.
+if (require.main === module) {
+  ensureDataFile();
 
-server.on("error", (error) => {
-  if (error.code === "EADDRINUSE") {
-    console.error(`Port ${PORT} on ${HOST} is already in use.`);
-    console.error("Close the other kiosk window, or change server.port in config/kiosk-config.json.");
-  } else {
-    console.error(error);
-  }
-  process.exit(1);
-});
+  server.on("error", (error) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(`Port ${PORT} on ${HOST} is already in use.`);
+      console.error("Close the other kiosk window, or change server.port in config/kiosk-config.json.");
+    } else {
+      console.error(error);
+    }
+    process.exit(1);
+  });
 
-server.listen(PORT, HOST, () => {
-  const displayHost = HOST === "0.0.0.0" ? "localhost" : HOST;
-  console.log(`Expo challenge is running on http://${displayHost}:${PORT}`);
-  console.log(`Default screen: ${getDefaultRoute()}`);
-});
+  server.listen(PORT, HOST, () => {
+    const displayHost = HOST === "0.0.0.0" ? "localhost" : HOST;
+    console.log(`Expo challenge is running on http://${displayHost}:${PORT}`);
+    console.log(`Default screen: ${getDefaultRoute()}`);
+  });
+}
+
+module.exports = {
+  GAMES,
+  DEFAULT_GAME_ID,
+  GAME_SCHEMAS,
+  toBoundedNumber,
+  toBoundedFloat,
+  normalizeGameSettings,
+  normalizeDuelGameSettings,
+  normalizeBySchema,
+  normalizeGameId,
+  publicConfig,
+  getLeaderboard,
+  getAllLeaderboards,
+  buildCsv,
+  sanitizeName,
+  validateStandaloneEntry
+};

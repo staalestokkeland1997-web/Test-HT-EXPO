@@ -1,0 +1,46 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run tests
+        run: npm test
+      - name: Config files must stay valid JSON
+        run: |
+          for f in config/*.json package.json; do
+            node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" || exit 1
+          done
+      - name: No API keys committed to config
+        run: |
+          node -e "
+            const c = require('./config/contest-config.json');
+            for (const [name, value] of Object.entries(c.apiKeys || {})) {
+              if (value) {
+                console.error('config/contest-config.json still carries a live ' + name + ' key.');
+                console.error('API keys belong in environment variables, not in a public repo.');
+                process.exit(1);
+              }
+            }
+          "
+      - name: The USB copy must match the repository
+        run: |
+          # USB-mappen har i tillegg sine egne filer (portabel Node,
+          # download_chrome.ps1), saa sjekken gaar en vei: alt som ligger i
+          # repoet skal finnes likt i USB-kopien.
+          U=Hatteland_Challenge_USB_OPPDATERT
+          for d in public lib config test; do
+            diff -r "$d" "$U/$d"
+          done
+          for f in server.js package.json README.md tools/download_tiles.js; do
+            diff "$f" "$U/$f"
+          done

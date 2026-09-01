@@ -22,6 +22,14 @@ Hatteland_Challenge_USB_OPPDATERT.zip
 data/backups/
 **/data/backups/
 
-# ECDIS-seilasen lagres av serveren under kjoring (slett for aa nullstille)
+# ECDIS-seilasen lagres av serveren under kjoring (slett for aa nullstille).
+# En fil per kiosk-id; ?kiosk= uten verdi lander fortsatt i ecdis-state.json.
 data/ecdis-state.json
 **/data/ecdis-state.json
+data/ecdis-state/
+**/data/ecdis-state/
+
+# Kartfliser lastes ned med `node tools/download_tiles.js` (hundrevis av MB).
+# De blir med paa minnepennen naar mappen kopieres, ikke via git.
+data/tiles/
+**/data/tiles/
