@@ -28,3 +28,8 @@ data/ecdis-state.json
 **/data/ecdis-state.json
 data/ecdis-state/
 **/data/ecdis-state/
+
+# Kartfliser lastes ned med `node tools/download_tiles.js` (hundrevis av MB).
+# De blir med paa minnepennen naar mappen kopieres, ikke via git.
+data/tiles/
+**/data/tiles/

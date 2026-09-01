@@ -1,0 +1,24 @@
+{
+  "_comment": "Hvilke kartfliser 'node tools/download_tiles.js' laster ned til data/tiles/. bbox er [latMin, latMax, lonMin, lonMax]. Kjor verktoyet med --dry-run for aa se antall fliser og anslatt storrelse for du laster ned.",
+  "layers": ["sjokart", "seamark"],
+  "areas": [
+    {
+      "name": "Norskekysten (oversikt)",
+      "bbox": [56.0, 64.0, 0.5, 10.5],
+      "minZoom": 5,
+      "maxZoom": 10
+    },
+    {
+      "name": "Bergen/Byfjorden (demoruten)",
+      "bbox": [59.85, 60.45, 4.45, 5.45],
+      "minZoom": 11,
+      "maxZoom": 14
+    },
+    {
+      "name": "Haugesund/Karmsund",
+      "bbox": [59.2, 59.6, 5.0, 5.6],
+      "minZoom": 11,
+      "maxZoom": 14
+    }
+  ]
+}

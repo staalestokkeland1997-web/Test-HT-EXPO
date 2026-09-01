@@ -1251,7 +1251,11 @@ class Component extends DCLogic {
   cellLL(x, y) { const B = this.bbox; return { lat: B.latMax - y / (this.GH - 1) * (B.latMax - B.latMin), lon: B.lonMin + x / (this.GW - 1) * (B.lonMax - B.lonMin) }; }
   ensureCoastline() {
     if (this._coast || this._coastLoading) return; this._coastLoading = true;
-    const urls = ['https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_10m_land.geojson', 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson'];
+    // Kystlinjen ligger lokalt (public/ecdis/data/, Natural Earth klippet til
+    // Nordsjoen/Norskehavet), saa ruteplanleggingen unngaar land ogsaa uten
+    // nett. Kildene beholdes som reserve for file://-modus og for det tilfellet
+    // at filen mangler.
+    const urls = ['data/ne_10m_land.geojson', 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_10m_land.geojson', 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson'];
     const tryUrl = (i) => { if (i >= urls.length) { this._coastLoading = false; return; } fetch(urls[i]).then(r => { if (!r.ok) throw 0; return r.json(); }).then(j => { const B = { latMin: 54, latMax: 73, lonMin: -3, lonMax: 33 }; const polys = []; for (const f of (j.features || [])) { const g = f.geometry; if (!g) continue; const parts = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []; for (const poly of parts) { const r0 = poly[0]; let hit = false; for (const p of r0) { if (p[1] > B.latMin && p[1] < B.latMax && p[0] > B.lonMin && p[0] < B.lonMax) { hit = true; break; } } if (hit) polys.push(poly); } } this._coast = polys; this._coastLoading = false; if (this._planDest) this._doPlan(this._planDest, true); }).catch(() => tryUrl(i + 1)); };
     tryUrl(0);
   }
@@ -2786,23 +2790,36 @@ class Component extends DCLogic {
     const done = () => { delete this.tileLoading[key]; if (counted) this._tileInflight = Math.max(0, (this._tileInflight || 1) - 1); };
     const accept = (img) => { this.tiles[key] = img; done(); if (this._tileTries) delete this._tileTries[key]; const ks = this._tileKeys || (this._tileKeys = []); ks.push(key); while (ks.length > 1000) { const old = ks.shift(); if (old !== key) delete this.tiles[old]; } if (layer === 'sjokart' || layer === this.state.base) this.setSrc('chart', 'ok'); };
     const fail = () => { done(); const tr = this._tileTries || (this._tileTries = {}); const t = (tr[key] = (tr[key] || 0) + 1); if (!counted && t <= 4) setTimeout(() => { if (!this.tiles[key] && !this.tileLoading[key]) this.tileImg(layer, z, x, y); }, Math.min(8000, 400 * Math.pow(2, t - 1))); if (t > 4 && (layer === 'sjokart' || layer === this.state.base) && (!this.srcStatus || this.srcStatus.chart !== 'ok')) this.setSrc('chart', 'error'); };
-    const url = this.TILE(layer).f(z, x, y);
+    const src = this.TILE(layer).f(z, x, y);
+    const local = this.localTileUrl(layer, z, x, y);
+    const url = local || src, alt = local ? src : null;
     Promise.resolve(this.tileCacheGet(key)).then(rec => {
       const fresh = rec && rec.b && (Date.now() - (rec.t || 0)) < this.TILE_TTL;
-      if (fresh) return this._blobImg(rec.b).then(accept).catch(() => this._netTile(url, key, accept, fail, null));
-      this._netTile(url, key, accept, fail, rec && rec.b);
-    }).catch(() => this._netTile(url, key, accept, fail, null));
+      if (fresh) return this._blobImg(rec.b).then(accept).catch(() => this._netTile(url, key, accept, fail, null, alt));
+      this._netTile(url, key, accept, fail, rec && rec.b, alt);
+    }).catch(() => this._netTile(url, key, accept, fail, null, alt));
   }
-  _netTile(url, key, accept, fail, staleBlob) {
+  // Kjorer siden bak kiosk-serveren, hentes flisen fra dens eget lager paa
+  // /tiles/... (lib/tiles.js). Da virker kartet uten nett paa omraadene som er
+  // lastet ned med tools/download_tiles.js, og flisene er samme opphav —
+  // viktig, for landmasken leser pikslene av dem. Ligger ikke flisen der,
+  // faller vi tilbake til kilden slik det alltid har vaert. Aapnet fra fil
+  // (file://) gaar alt rett til kilden som foer.
+  localTileUrl(layer, z, x, y) {
+    if (typeof location === 'undefined' || !/^https?:$/.test(location.protocol)) return null;
+    return `/tiles/${layer}/${z}/${x}/${y}.png`;
+  }
+  _netTile(url, key, accept, fail, staleBlob, altUrl) {
     // utloept/manglende reserve: fetch gir bytes til lageret; blokkerer verten
     // fetch (men ikke Image), brukes dagens Image-vei uten lagring; til slutt
     // den utloepte flisen om den finnes — bedre gammelt kart enn blank sjoe.
     const stale = () => { if (staleBlob) this._blobImg(staleBlob).then(accept).catch(fail); else fail(); };
-    const viaImg = () => { const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = () => accept(img); img.onerror = () => stale(); img.src = url; };
-    fetch(url, { mode: 'cors' })
+    const viaImg = (u) => { const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = () => accept(img); img.onerror = () => stale(); img.src = u; };
+    const get = (u, next) => fetch(u, { mode: 'cors' })
       .then(r => { if (!r.ok) throw 0; return r.blob(); })
       .then(blob => this._blobImg(blob).then(img => { accept(img); this.tileCachePut(key, blob); }))
-      .catch(viaImg);
+      .catch(next);
+    get(url, altUrl ? () => get(altUrl, () => viaImg(altUrl)) : () => viaImg(url));
   }
   // `pri` (a distance-from-screen-centre score) marks a request as coming from
   // the draw loop, so it goes through the scheduler in pumpTiles(). Callers

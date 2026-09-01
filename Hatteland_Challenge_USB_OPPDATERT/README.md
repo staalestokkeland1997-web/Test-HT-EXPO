@@ -261,6 +261,29 @@ Highscoren staar ogsaa i nettleseren (`public/scores.js`): poengene lagres lokal
 
 ECDIS-seilasen lagres per kiosk under `data/ecdis-state/<kiosk-id>.json`, der id-en kommer fra `?kiosk=` i URL-en. ECDIS og radar aapnes med samme verdi og deler derfor seilas; to skjermer med ulik id overskriver ikke lenger hverandre. Uten `?kiosk=` brukes den gamle `data/ecdis-state.json`. Slett filene for aa nullstille.
 
+## Kart uten nett
+
+Sjokartet kommer normalt flis for flis fra Kartverket, saa uten nett er sjoen blank. `tools/download_tiles.js` henter flisene ned til `data/tiles/` en gang, og etter det serverer kiosken kartet fra sin egen disk paa `/tiles/...` — ECDIS og radaren virker da uten nett paa omraadene som er hentet.
+
+Kjor det EN gang paa en PC med internett, foer minnepennen pakkes:
+
+```bash
+node tools/download_tiles.js --dry-run    # hvor mange fliser, hvor stort
+node tools/download_tiles.js              # last ned
+```
+
+Paa Windows: dobbeltklikk `LAST_NED_KART.bat`. Nedlastingen kan avbrytes og startes igjen — fliser som ligger der fra foer hoppes over.
+
+Omraadene staar i `config/tiles-config.json` (`bbox` er `[latMin, latMax, lonMin, lonMax]`). Som levert dekker den Norskekysten i oversikt (z5–10) og Bergen/Byfjorden + Haugesund/Karmsund naert (z11–14) — til sammen rundt 240 MB. **Ett zoomnivaa til firedobler nedlastingen**, saa kjor alltid `--dry-run` foer du utvider. Skal demoen kjores et annet sted, legg omraadet inn der og kjor verktoyet paa nytt.
+
+Flisene ligger utenfor git fordi de er for store. De blir med paa minnepennen naar mappen kopieres, ikke naar repoet klones — sjekk `data/tiles/` foer du drar paa messe. `GET /api/health` viser hvor mange fliser som ligger lokalt.
+
+Er en flis ikke lastet ned og maskinen har nett, hentes den og lagres — lageret fylles ogsaa av vanlig bruk. Sett `TILES_OFFLINE=1` for aa slaa det av helt; da vises bare det som faktisk er lastet ned, og kiosken proever aldri aa naa nettet etter kart.
+
+Kystlinjen som ruteplanleggingen bruker for aa unngaa land ligger ferdig i `public/ecdis/data/ne_10m_land.geojson` (Natural Earth, klippet til Nordsjoen/Norskehavet), saa den trenger heller ikke nett.
+
+Vaer og tidevann (`api.met.no`, `vannstand.kartverket.no`) er ferske maalinger og kan ikke lastes ned paa forhaand. Uten nett viser ECDIS-en dem som utilgjengelige; kart, rute, simulering og radar virker som normalt. AIS krever ogsaa nett — uten den seiler demoskipet alene.
+
 ## PIN-laas (valgfritt)
 
 Settes `KIOSK_PIN` i miljoet foer serveren startes, ber alle sider om koden foerst. Koden ligger bare paa serveren og sendes aldri til nettleseren; forsokene er bremset. `KIOSK_PIN_MINUTES` bestemmer hvor lenge en opplaasing varer (0 = til noen laaser igjen). Uten `KIOSK_PIN` er laasen helt av, og kiosken virker som foer.
@@ -335,12 +358,17 @@ Egendefinert sti kan settes med miljovariablene `CHROME_PATH` eller `EDGE_PATH`.
 config/
   contest-config.json
   kiosk-config.json
+  tiles-config.json       (hvilke omraader kartet lastes ned for)
 data/
   entries.json
+  tiles/                  (nedlastet sjokart - utenfor git, foelger mappen)
 lib/
   ais-kystverket.js       (Kystverkets AIS-stroem)
   ecdis-state.js          (validering av lagret ECDIS-seilas)
   proxy-allowlist.js      (hvilke verter /proxy faar hente fra)
+  tiles.js                (lag, flisregning og stier for kartlageret)
+tools/
+  download_tiles.js       (laster kartet ned til data/tiles/)
 test/
   *.test.js               (kjor med `npm test`)
 public/
@@ -348,6 +376,7 @@ public/
   scores.js                         (highscore: lokalt forst, server naar den svarer)
   kiosk-lock.js                     (PIN-laas, av med mindre KIOSK_PIN er satt)
   fullscreen.js                     (holder sidene i fullskjerm)
+  ecdis/data/ne_10m_land.geojson    (kystlinje for ruteplanlegging offline)
   select.html                       (kioskens forside)
   container-stacker-standalone.html
   fjord-runner-standalone.html
@@ -368,6 +397,7 @@ node/
 launcher.js
 server.js
 START_HT_GAME_KIOSK.bat   (spillvelger, kiosk)
+LAST_NED_KART.bat         (henter sjokartet for offline bruk)
 START_CONTAINER_STACKER.bat
 START_FJORD_RUNNER.bat
 START_DEEP_DIVE.bat

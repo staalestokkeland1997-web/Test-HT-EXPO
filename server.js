@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const { KystverketAis } = require("./lib/ais-kystverket");
 const { ecdisStateId, sanitizeEcdisState } = require("./lib/ecdis-state");
 const { proxyAllows } = require("./lib/proxy-allowlist");
+const tiles = require("./lib/tiles");
 
 const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
@@ -23,6 +24,12 @@ function ecdisStatePath(id) {
     : path.join(ECDIS_STATE_DIR, `${id}.json`);
 }
 const BACKUP_DIR = path.join(ROOT_DIR, "data", "backups");
+// Kartflisene ligger utenfor public/ med vilje: de lastes ned under drift
+// og skal ikke kunne serveres som vilkaarlige filer av den statiske veien.
+const TILE_DIR = path.join(ROOT_DIR, "data", "tiles");
+// Satt for aa la kiosken vaere helt offline: da hentes ingen manglende flis
+// fra nettet, og kartet viser bare det som faktisk er lastet ned.
+const TILES_OFFLINE = process.env.TILES_OFFLINE === "1";
 const DEFAULT_KIOSK_CONFIG = {
   server: {
     host: "127.0.0.1",
@@ -99,6 +106,7 @@ const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".geojson": "application/geo+json; charset=utf-8",
   ".svg": "image/svg+xml",
   ".webmanifest": "application/manifest+json; charset=utf-8",
   ".png": "image/png",
@@ -135,7 +143,9 @@ function loadConfig() {
 // aldri etterlater en halvskrevet config- eller datafil.
 function writeFileAtomic(filePath, contents) {
   const tempPath = `${filePath}.tmp-${process.pid}`;
-  fs.writeFileSync(tempPath, contents, "utf8");
+  // Kartfliser kommer som Buffer; da skal det ikke settes tekstkoding.
+  if (Buffer.isBuffer(contents)) fs.writeFileSync(tempPath, contents);
+  else fs.writeFileSync(tempPath, contents, "utf8");
   fs.renameSync(tempPath, filePath);
 }
 
@@ -893,6 +903,7 @@ async function handleApi(request, response, url) {
       ok: true,
       time: new Date().toISOString(),
       storage: { mode: "local-file", persistent: true },
+      map: tileStoreSummary(),
       adminLocked: false
     });
     return;
@@ -1287,6 +1298,139 @@ async function handleApi(request, response, url) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Lokalt kartlager
+// ---------------------------------------------------------------------------
+// /tiles/<lag>/<z>/<x>/<y>.png serverer sjokartet fra data/tiles/ naar flisen
+// er lastet ned (se tools/download_tiles.js), og henter den ellers fra kilden
+// og lagrer den. Dermed virker kiosken uten nett paa omraadene som er hentet
+// ned, og lageret fylles ogsaa av vanlig bruk.
+//
+// Laget slaas opp i en fast tabell og z/x/y er heltall innenfor zoomnivaaets
+// grenser, saa ingen del av URL-en mot kilden kommer fra forespoerselen.
+const TILE_ROUTE = /^\/tiles\/([a-z]+)\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})\.png$/;
+const tileFetching = new Map();
+
+function sendTileFile(response, filePath) {
+  const stream = fs.createReadStream(filePath);
+  stream.on("error", () => {
+    if (!response.headersSent) sendText(response, 404, "Tile not found");
+    else response.end();
+  });
+  response.writeHead(200, {
+    "Content-Type": "image/png",
+    // Flisene er identifisert av z/x/y og endrer seg ikke innenfor en messe.
+    "Cache-Control": "public, max-age=604800",
+    "Access-Control-Allow-Origin": "*"
+  });
+  stream.pipe(response);
+}
+
+// En flis av gangen per noekkel: uten dette ville de 20-30 samtidige
+// forespoerslene en panorering utloser kunne hente og skrive samme flis flere
+// ganger. Ventende forespoersler faar samme svar.
+function fetchTileOnce(layer, z, x, y, filePath) {
+  const key = `${layer}/${z}/${x}/${y}`;
+  const running = tileFetching.get(key);
+  if (running) return running;
+
+  const job = (async () => {
+    const upstream = await fetch(tiles.tileUrl(layer, z, x, y), {
+      headers: { "User-Agent": PROXY_UA },
+      redirect: "follow",
+      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS)
+    });
+
+    if (!upstream.ok) throw new Error(`upstream ${upstream.status}`);
+
+    const body = Buffer.from(await upstream.arrayBuffer());
+    if (!body.length || body.length > 4 * 1024 * 1024) throw new Error("bad tile size");
+
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileAtomic(filePath, body);
+    return body;
+  })().finally(() => tileFetching.delete(key));
+
+  tileFetching.set(key, job);
+  return job;
+}
+
+async function handleTiles(request, response, match) {
+  const [, layer, zRaw, xRaw, yRaw] = match;
+  const z = Number(zRaw);
+  const x = Number(xRaw);
+  const y = Number(yRaw);
+
+  if (!tiles.isValidTile(layer, z, x, y)) {
+    sendText(response, 404, "Unknown tile");
+    return;
+  }
+
+  const filePath = tiles.tilePath(TILE_DIR, layer, z, x, y);
+
+  if (fs.existsSync(filePath)) {
+    sendTileFile(response, filePath);
+    return;
+  }
+
+  // Ingen lagret flis. Uten nett (eller med TILES_OFFLINE=1) svarer vi 404 med
+  // en gang: ECDIS tegner da sitt eget fallback-rutenett i stedet for aa vente.
+  if (TILES_OFFLINE) {
+    sendText(response, 404, "Tile not downloaded");
+    return;
+  }
+
+  try {
+    const body = await fetchTileOnce(layer, z, x, y, filePath);
+    response.writeHead(200, {
+      "Content-Type": "image/png",
+      "Cache-Control": "public, max-age=604800",
+      "Access-Control-Allow-Origin": "*"
+    });
+    response.end(body);
+  } catch (error) {
+    sendText(response, 404, "Tile not available");
+  }
+}
+
+// Hvor mye av kartet som faktisk ligger lokalt. Brukes av status.html og av
+// download_tiles.js, og sier med en gang om en kiosk er klar for aa staa uten
+// nett.
+function tileStoreSummary() {
+  const layers = {};
+  let total = 0;
+  let bytes = 0;
+
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (error) {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith(".png")) {
+        total++;
+        try {
+          bytes += fs.statSync(full).size;
+        } catch (error) {
+          /* fjernet mens vi talte */
+        }
+      }
+    }
+  };
+
+  for (const layer of Object.keys(tiles.LAYERS)) {
+    const before = total;
+    walk(path.join(TILE_DIR, layer));
+    if (total > before) layers[layer] = total - before;
+  }
+
+  return { tiles: total, bytes, layers, offline: TILES_OFFLINE };
+}
+
 // CORS-proxy for ECDIS-demoens dataleverandoerer (MET/yr, Kartverket tide,
 // EMODnet, kystlinje). Streng allowlist (lib/proxy-allowlist.js) saa den ikke
 // kan misbrukes som aapent relay; api.met.no krever dessuten en
@@ -1483,7 +1627,16 @@ function handleAis(request, response, url) {
 
 const server = http.createServer(async (request, response) => {
   try {
-    const url = new URL(request.url, "http://localhost");
+    // En sti som ikke lar seg tolke (f.eks. "//", som URL leser som en
+    // protokollrelativ adresse) er en ugyldig forespoersel, ikke en feil i
+    // kiosken - svar 404 i stedet for aa la den bli en 500.
+    let url;
+    try {
+      url = new URL(request.url, "http://localhost");
+    } catch (error) {
+      sendText(response, 404, "Not found");
+      return;
+    }
 
     if (url.pathname.startsWith("/api/")) {
       await handleApi(request, response, url);
@@ -1492,6 +1645,12 @@ const server = http.createServer(async (request, response) => {
 
     if (url.pathname.startsWith("/ais/")) {
       handleAis(request, response, url);
+      return;
+    }
+
+    const tileMatch = TILE_ROUTE.exec(url.pathname);
+    if (tileMatch) {
+      await handleTiles(request, response, tileMatch);
       return;
     }
 

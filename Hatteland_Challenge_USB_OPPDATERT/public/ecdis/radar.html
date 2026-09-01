@@ -787,6 +787,12 @@
     if (v === false || tilePending[key] || tileInflight >= TILE_MAX_INFLIGHT) return null;
     tilePending[key] = 1; tileInflight += 1;
     var url = "https://cache.kartverket.no/v1/wmts/1.0.0/sjokartraster/default/webmercator/" + z + "/" + y + "/" + x + ".png";
+    // Kiosk-serveren har sitt eget flislager paa /tiles/... (lib/tiles.js), saa
+    // radaren tegner land uten nett paa omraadene som er lastet ned. Aapnet fra
+    // fil finnes ingen server, og da gaar vi rett til kilden som foer.
+    var localUrl = /^https?:$/.test(location.protocol)
+      ? "/tiles/sjokart/" + z + "/" + x + "/" + y + ".png"
+      : null;
     var settled = false;
     function finish() { if (settled) return; settled = true; delete tilePending[key]; tileInflight -= 1; }
     function load(src, cross, onFail) {
@@ -796,22 +802,26 @@
       img.onerror = onFail;
       img.src = src;
     }
-    // Direkte forst (Kartverket sender CORS); blokkeres det, gaa via sidens
-    // egen /proxy - da er flisen samme opphav og pikslene kan leses.
-    load(url, true, function () {
-      var pb = proxyBase();
-      if (pb) {
-        load(pb + encodeURIComponent(url), false, function () {
-          finish();
-          tileTries[key] = (tileTries[key] || 0) + 1;
-          if (tileTries[key] >= 3) tileLand[key] = false;
-        });
-        return;
-      }
+    function giveUp() {
       finish();
       tileTries[key] = (tileTries[key] || 0) + 1;
       if (tileTries[key] >= 3) tileLand[key] = false;
-    });
+    }
+    // Det lokale lageret forst - der er flisen samme opphav og pikslene kan
+    // leses uten CORS. Deretter direkte (Kartverket sender CORS); blokkeres
+    // det, gaa via sidens egen /proxy.
+    function fromSource() {
+      load(url, true, function () {
+        var pb = proxyBase();
+        if (pb) {
+          load(pb + encodeURIComponent(url), false, giveUp);
+          return;
+        }
+        giveUp();
+      });
+    }
+    if (localUrl) load(localUrl, false, fromSource);
+    else fromSource();
     return null;
   }
 
